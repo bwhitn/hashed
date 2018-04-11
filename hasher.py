@@ -69,36 +69,44 @@ class Hasher:
         self.hashes = []
         self.file = fileobj
         self.size = size
-        self.eof = False
+        self.has_data = True
 
 
     def _fill_buffer(self):
         needed = self.size - len(self.buff)
-        try:
-            data = self.file.read(needed)
-        except IOError:
-            self.file.close()
-            return False
-        if len(data) == 0:
-            self.file.close()
-            return False
-        self.buff.append(data)
-        return True
+        while self.has_data and needed > 0:
+            try:
+                data = self.file.read(needed)
+            except IOError:
+                self.file.close()
+                self.has_data = False
+            if len(data) == 0:
+                self.file.close()
+                self.has_data = False
+            self.buff.append(data)
+            needed = self - len(self.buff)
 
 
     def _split(self):
         split_val = Hasher.space.split(self.buff, 1)
         if len(split_val) == 1:
-            if len(split_val[0]) == 0 and self.eof:
+            if len(split_val[0]) == 0:
                 return None
             elif len(split_val[0]) <= Hasher._min_space_to_match:
                 ret_val = split_val[0]
                 self.buff = bytearray()
-            elif len(split_val[0]) > Hasher._min_space_to_match:
+            else:
                 ret_val = self.buff[0:-Hasher._min_space_to_match]
                 self.buff = self.buff[:-Hasher._min_space_to_match]
             return ret_val
         elif len(split_val) == 2:
+            if len(split_val[1]) == 0:
+                if len(split_val[0]) == 0:
+                    return None
+                pass # to small need the last min space to match and
+            if len(split_val[1]) > Hasher._min_space_to_match:
+                pass
+
             self.buff = bytearray(split_val[1])
             return split_val[0]
 
