@@ -60,7 +60,8 @@ class Adler32:
 
 class Hasher:
 
-    space = re.compile(b"(?:\\0{4,})|(?:\n{4,})|(?:(?:\r\n){2,})")
+    _break_space = re.compile(b"(?:\\0{4,})|(?:\n{4,})|(?:(?:\r\n){2,})")
+    _min_space_to_match = 4
 
     def __init__(self, fileobj, size = 512):
         assert isinstance(fileobj, BufferedReader)
@@ -68,6 +69,7 @@ class Hasher:
         self.hashes = []
         self.file = fileobj
         self.size = size
+        self.eof = False
 
 
     def _fill_buffer(self):
@@ -87,16 +89,15 @@ class Hasher:
     def _split(self):
         split_val = Hasher.space.split(self.buff, 1)
         if len(split_val) == 1:
-            if len(split_val[0]) == 0:
+            if len(split_val[0]) == 0 and self.eof:
                 return None
-            elif len(split_val[0]) > 0 and len(split_val[0]) < 5:
+            elif len(split_val[0]) <= Hasher._min_space_to_match:
                 ret_val = split_val[0]
                 self.buff = bytearray()
-                return ret_val
-            elif len(split_val[0]) > 4:
-                ret_val = self.buff[0:-4]
-                self.buff = self.buff[:-4]
-                return ret_val
+            elif len(split_val[0]) > Hasher._min_space_to_match:
+                ret_val = self.buff[0:-Hasher._min_space_to_match]
+                self.buff = self.buff[:-Hasher._min_space_to_match]
+            return ret_val
         elif len(split_val) == 2:
             self.buff = bytearray(split_val[1])
             return split_val[0]
@@ -118,13 +119,11 @@ def openfile(file):
 def create_hash(file_path):
     space = re.compile(b"((\0){8,})|(\r{4,})|((\r\n){4,})")
     file = openfile(file_path)
-    buffer = BytesIO()
     first_hash = None
     last_hash = None
     hashes = []
     while file.readable():
-        buffer.seek(0)
-        print(buffer)
+        pass
     if first_hash != None:
         hashes.insert(0, first_hash)
     if last_hash != None:
@@ -141,16 +140,15 @@ def main():
     pass
 
 
-space = re.compile(b"(?:\\0{4,})|(?:\n{4,})|(?:(?:\r\n){2,})")
-test = space.split(b"\n\n\n\nhi", 1) # should be 2 and 0: break 1:buffer "hi"
-test2 = space.split(b"hi\n\n\n\n", 1) # should be 2 and 0: hash 1:break returned to buffer "\n\n\n\n"
-test3 = space.split(b"\0\0\0\0\0\0\0\0hi\0\0", 1) # should be 2 and 0: break 1: buffer "hi\0\0"
-test4 = space.split(b"\n\n\n\n\n\n", 1) # should be 2 and 0: break 1: break buffer "\n\n\n\n"
+test = Hasher._break_space.split(b"\n\n\n\nhi", 1) # should be 2 and 0: break 1:buffer "hi"
+test2 = Hasher._break_space.split(b"hi\n\n\n\n", 1) # should be 2 and 0: hash 1:break returned to buffer "\n\n\n\n"
+test3 = Hasher._break_space.split(b"\0\0\0\0\0\0\0\0hi\0\0", 1) # should be 2 and 0: break 1: buffer "hi\0\0"
+test4 = Hasher._break_space.split(b"\n\n\n\n\n\n", 1) # should be 2 and 0: break 1: break buffer "\n\n\n\n"
 
-test5 = space.split(b"\n\n\n", 1) # should be 1 and 0: hash buffer ""
-test6 = space.split(b"kljsdhioah", 1) # should be 1 and 0: hash buffer "ioah"
-test7 = space.split(b"", 1) # should be 1 and 0: null (EOF)
-test8 = space.split(b"abcd", 1) # should be 1 and 0: hash (EOF)
+test5 = Hasher._break_space.split(b"\n\n\n", 1) # should be 1 and 0: hash buffer "\n\n\n"
+test6 = Hasher._break_space.split(b"kljsdhioah", 1) # should be 1 and 0: hash buffer "ioah"
+test7 = Hasher._break_space.split(b"", 1) # should be 1 and 0: null (EOF)
+test8 = Hasher._break_space.split(b"abcd", 1) # should be 1 and 0: hash (EOF)
 
 
 
