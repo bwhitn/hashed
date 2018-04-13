@@ -10,7 +10,7 @@ from os import path
 # Distributed under the terms of the Modified BSD License.
 
 # Z85CHARS is the base 85 symbol table with minor change
-Z85CHARS = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-_?+=^!/*&<>()[]{}@%$#"
+Z85CHARS = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-_?+=^!/*&<>()[]{}@%$~"
 _85s = [85 ** i for i in range(5)][::-1]
 
 
@@ -109,7 +109,10 @@ class HashSig:
                 hasher.update(data)
                 self._fill_buffer()
                 data = self._split()
-            self._hashes.append(hasher.finalize())
+            hashed_val = hasher.finalize()
+            # Don't allow identical hashes to be constantly added
+            if hashed_val not in self._hashes:
+                self._hashes.append(hashed_val)
         return self._hashes
 
 
