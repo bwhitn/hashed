@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 import re
-from sys import version_info, stderr
 from glob import glob
 from io import BufferedReader
 from os import path
+from sys import version_info, stderr
 
 # Heavily modified PyZMQ base85 encoder
 # Copyright (C) PyZMQ Developers
@@ -29,12 +29,17 @@ class Adler32:
     def __init__(self):
         self._high = 0
         self._low = 1
+        self._bytes = 0
 
     def update(self, data):
         assert isinstance(data, bytes) or isinstance(data, bytearray)
+        self._bytes += len(data)
         for byte in data:
             self._low = (self._low + byte) % Adler32.mod_val
             self._high = (self._low + self._high) % Adler32.mod_val
+
+    def bytes_seen(self):
+        return self._bytes
 
     def finalize(self):
         ret_val = (self._high << 16 | self._low) & 0xffffffff
@@ -47,13 +52,15 @@ class HashSig:
     _break_space = re.compile(b"(?:\\0{4,})|(?:\n{4,})|(?:(?:\r\n){2,})")
     _min_space_to_match = 4
 
-    def __init__(self, fileobj, size=512):
+    def __init__(self, fileobj, max_hash, size=512):
         assert isinstance(fileobj, BufferedReader)
         self._buff = bytearray()
         self._hashes = []
         self._file = fileobj
         self._buff_size = size
         self._has_data = True
+        self._max_hash_size = max_hash
+        self._hash_comp_loc = 1
 
     def _fill_buffer(self):
         needed = self._buff_size - len(self._buff)
@@ -99,6 +106,7 @@ class HashSig:
                     self._buff = self._buff[:-HashSig._min_space_to_match]
                 return split_val[0]
 
+    # TODO: specify a max hash size.
     def hash_data(self):
         hasher = Adler32()
         self._fill_buffer()
@@ -117,12 +125,12 @@ class HashSig:
         return self._hashes
 
 
-# TODO: set a max file size via args and allow a min file size set via args
-def _openfile(file):
+def _openfile(file, min_size, max_size):
     assert isinstance(file, str)
     if path.isfile(file):
         try:
-            if path.getsize(file) > 0:
+            _file_size = path.getsize(file)
+            if min_size <= _file_size <= max_size:
                 return open(file, "rb")
         except OSError:
             pass
@@ -137,23 +145,25 @@ def _format_hash(hash_list):
     return ":".join(ret_val)
 
 
-# TODO: specify a max hash size.
-def print_hashes(file_path, rec=False):
+def print_hashes(file_path, parsinfo, rec=False):
     if rec:
         _glob_val = glob(file_path, recursive=True)
     else:
         _glob_val = glob(file_path)
     for globbed_file in _glob_val:
-        file_ctx = _openfile(globbed_file)
+        file_ctx = _openfile(globbed_file, parsinfo.a, parsinfo.b)
         if file_ctx is not None:
-            hashy_mc_hasherton = HashSig(file_ctx)
+            hashy_mc_hasherton = HashSig(file_ctx, parsinfo.h)
             print("{1}\t{0}".format(_format_hash(hashy_mc_hasherton.hash_data()), globbed_file))
 
 
 def arg():
     _parser = argparse.ArgumentParser(description="File Stream Hasher")
+    _parser.add_argument('-a', '-min', type=int, default=0, help="Minimum size of file.")
+    _parser.add_argument('-b', '-max', type=int, default=(1 << 24), help="Maximum size of file.")
+    _parser.add_argument('-h', '-maxhash', type=int, default=(1 << 24), help="Maximum size of hash to create")
     _parser.add_argument('-r', '-recursive', action='store_const', const=True, required=False,
-                             help="Hash files recursively")
+                         help="Hash files recursively")
     _parser.add_argument('files', nargs='*', help="Files to hash")
     return _parser
 
@@ -164,12 +174,12 @@ if __name__ == "__main__":
     if len(parser.files) > 0:
         if version_info >= (3, 5) and parser.r is not None:
             for _file in parser.files:
-                print_hashes(_file, True)
+                print_hashes(_file, parser, True)
         else:
             if version_info < (3, 5):
                 print("Python version < 3.5 glob recursion is not fully supported", file=stderr)
             for _file in parser.files:
-                print_hashes(_file)
+                print_hashes(_file, parser)
     else:
         args.print_help()
 
