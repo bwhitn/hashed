@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import re
+from sys import version_info, stderr
 from glob import glob
 from io import BufferedReader
 from os import path
@@ -137,8 +138,12 @@ def _format_hash(hash_list):
 
 
 # TODO: specify a max hash size.
-def print_hashes(file_path, rec):
-    for globbed_file in glob(file_path, recursive=rec):
+def print_hashes(file_path, rec=False):
+    if rec:
+        _glob_val = glob(file_path, recursive=True)
+    else:
+        _glob_val = glob(file_path)
+    for globbed_file in _glob_val:
         file_ctx = _openfile(globbed_file)
         if file_ctx is not None:
             hashy_mc_hasherton = HashSig(file_ctx)
@@ -148,7 +153,7 @@ def print_hashes(file_path, rec):
 def arg():
     _parser = argparse.ArgumentParser(description="File Stream Hasher")
     _parser.add_argument('-r', '-recursive', action='store_const', const=True, required=False,
-                         help="Hash files recursively")
+                             help="Hash files recursively")
     _parser.add_argument('files', nargs='*', help="Files to hash")
     return _parser
 
@@ -157,12 +162,14 @@ if __name__ == "__main__":
     args = arg()
     parser = args.parse_args()
     if len(parser.files) > 0:
-        if parser.r is not None:
-            recursive = True
+        if version_info >= (3, 5) and parser.r is not None:
+            for _file in parser.files:
+                print_hashes(_file, True)
         else:
-            recursive = False
-        for _file in parser.files:
-            print_hashes(_file, recursive)
+            if version_info < (3, 5):
+                print("Python version < 3.5 glob recursion is not fully supported", file=stderr)
+            for _file in parser.files:
+                print_hashes(_file)
     else:
         args.print_help()
 
