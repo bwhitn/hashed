@@ -45,6 +45,7 @@ class Adler32:
         ret_val = (self._high << 16 | self._low) & 0xffffffff
         self._high = 0
         self._low = 1
+        self._bytes = 0
         return ret_val
 
 
@@ -52,28 +53,29 @@ class HashSig:
     _break_space = re.compile(b"(?:\\0{4,})|(?:\n{4,})|(?:(?:\r\n){2,})")
     _min_space_to_match = 4
 
-    def __init__(self, fileobj, max_hash, size=512):
+    def __init__(self, fileobj, parsed_args, size=512):
         assert isinstance(fileobj, BufferedReader)
         self._buff = bytearray()
         self._hashes = []
         self._file = fileobj
         self._buff_size = size
         self._has_data = True
-        self._max_hash_size = max_hash
         self._hash_comp_loc = 1
+        self._parsed_args = parsed_args
 
     def _fill_buffer(self):
         needed = self._buff_size - len(self._buff)
         while self._has_data and needed > 0:
+            _data = b''
             try:
-                data = self._file.read(needed)
+                _data = self._file.read(needed)
             except IOError:
                 self._file.close()
                 self._has_data = False
-            if len(data) == 0:
+            if len(_data) == 0:
                 self._file.close()
                 self._has_data = False
-            self._buff += data
+            self._buff += _data
             needed = self._buff_size - len(self._buff)
 
     def _split(self):
@@ -106,11 +108,10 @@ class HashSig:
                     self._buff = self._buff[:-HashSig._min_space_to_match]
                 return split_val[0]
 
-    # TODO: specify a max hash size.
     def hash_data(self):
         hasher = Adler32()
         self._fill_buffer()
-        hasher.update(self._buff)
+        hasher.update(self._buff[:8])
         self._hashes.append(hasher.finalize())
         while self._has_data or len(self._buff) > 0:
             data = self._split()
@@ -118,10 +119,22 @@ class HashSig:
                 hasher.update(data)
                 self._fill_buffer()
                 data = self._split()
+            if hasher.bytes_seen() < self._parsed_args.m:
+                hasher.finalize()
+                continue
             hashed_val = hasher.finalize()
             # Don't allow identical hashes to be constantly added
             if hashed_val not in self._hashes:
                 self._hashes.append(hashed_val)
+                if len(self._hashes) > self._parsed_args.s:
+                    _hash_a = self._hashes[self._hash_comp_loc]
+                    _hash_b = self._hashes[self._hash_comp_loc + 1]
+                    self._hashes.remove(_hash_a)
+                    self._hashes.remove(_hash_b)
+                    self._hashes.insert(self._hash_comp_loc, _hash_a ^ _hash_b)
+                    self._hash_comp_loc = (self._hash_comp_loc + 1) % self._parsed_args.s
+                    if self._hash_comp_loc < 1:
+                        self._hash_comp_loc = 1
         return self._hashes
 
 
@@ -153,17 +166,18 @@ def print_hashes(file_path, parsinfo, rec=False):
     for globbed_file in _glob_val:
         file_ctx = _openfile(globbed_file, parsinfo.a, parsinfo.b)
         if file_ctx is not None:
-            hashy_mc_hasherton = HashSig(file_ctx, parsinfo.h)
-            print("{1}\t{0}".format(_format_hash(hashy_mc_hasherton.hash_data()), globbed_file))
+            hashy_mc_hasherton = HashSig(file_ctx, parsinfo)
+            print("{}\t{}".format(_format_hash(hashy_mc_hasherton.hash_data()), globbed_file))
 
 
 def arg():
     _parser = argparse.ArgumentParser(description="File Stream Hasher")
-    _parser.add_argument('-a', '-min', type=int, default=0, help="Minimum size of file.")
-    _parser.add_argument('-b', '-max', type=int, default=(1 << 24), help="Maximum size of file.")
-    _parser.add_argument('-h', '-maxhash', type=int, default=(1 << 24), help="Maximum size of hash to create")
-    _parser.add_argument('-r', '-recursive', action='store_const', const=True, required=False,
-                         help="Hash files recursively")
+    _parser.add_argument('-a', '-min', type=int, default=0, help="Minimum size of file. default: 0")
+    _parser.add_argument('-b', '-max', type=int, default=(1 << 24), help="Maximum size of file. default: 2^24")
+    _parser.add_argument('-m', '-minsize', type=int, default=8, help="Minimum bytes that will generate a hash. default: 8")
+    _parser.add_argument('-r', '-recursive', action='store_const', const=True, help="Hash files recursively")
+    _parser.add_argument('-s', '-maxhash', type=int, default=(1 << 24),
+                         help="Maximum size of hash to create. min: 2, default: 2^24")
     _parser.add_argument('files', nargs='*', help="Files to hash")
     return _parser
 
@@ -171,7 +185,7 @@ def arg():
 if __name__ == "__main__":
     args = arg()
     parser = args.parse_args()
-    if len(parser.files) > 0:
+    if len(parser.files) > 0 or parser.s < 2 or parser.a < 0 or parser.b < parser.a:
         if version_info >= (3, 5) and parser.r is not None:
             for _file in parser.files:
                 print_hashes(_file, parser, True)
@@ -182,21 +196,3 @@ if __name__ == "__main__":
                 print_hashes(_file, parser)
     else:
         args.print_help()
-
-# test1 = HashSig._break_space.split(b"\n\n\n\nhi", 1) # should be 2 and 0: break 1:buffer "hi"
-# test2 = HashSig._break_space.split(b"hi\n\n\n\n", 1) # should be 2 and 0: hash 1:break returned to buffer "\n\n\n\n"
-# test3 = HashSig._break_space.split(b"\0\0\0\0\0\0\0\0hi\0\0", 1) # should be 2 and 0: break 1: buffer "hi\0\0"
-# test4 = HashSig._break_space.split(b"\n\n\n\n\n\n", 1) # should be 2 and 0: break 1: break buffer "\n\n\n\n"
-#
-# test5 = HashSig._break_space.split(b"\n\n\n", 1) # should be 1 and 0: hash buffer "\n\n\n"
-# test6 = HashSig._break_space.split(b"kljsdhioah", 1) # should be 1 and 0: hash buffer "ioah"
-# test7 = HashSig._break_space.split(b"", 1) # should be 1 and 0: null (EOF)
-# test8 = HashSig._break_space.split(b"abcd", 1) # should be 1 and 0: hash (EOF)
-#
-# thefile = _openfile(sys.argv[0])
-# hashy = HashSig(thefile)
-# print(hashy.hash_data())
-# test = Adler32()
-# test.update(b"Wikipedia")
-# print(_encb85(test.finalize()))
-# #print(open(sys.argv[0], "rb"))
