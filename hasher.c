@@ -129,7 +129,7 @@ void add_hash(struct Hash *hash, uint32_t hash_val) {
         hash->hash_size++;
         if (hash->hash_size == 21) {
             shuffle_value(hash);
-            hash->hash-size--;
+            hash->current_hash.size--;
         }
     }
 }
@@ -223,7 +223,7 @@ void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
     uint8_t hash_data[buff_size_s];
     if (hash->first_hash && hash->buff_size > 7) {
         memcpy(hash_data, hash->buff, 8);
-        adler32_update(hash->current_hash, hash_data, 8);
+        adler32_update(&hash->current_hash, hash_data, 8);
         hash->hashes[0] = adler32_finalize(&hash->current_hash);
     }
     uint8_t data_for_hashing[128];
@@ -235,7 +235,7 @@ void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
                 adler32_update(&hash->current_hash, hash_data, hash_data_size);
             } else {
                 uint32_t hash_val = adler32_finalize(&hash->current_hash);
-                adler32_init(&hash-current_hash);
+                adler32_init(&hash->current_hash);
             }
         }
     }
