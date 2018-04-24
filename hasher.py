@@ -79,34 +79,78 @@ class HashSig:
             needed = self._buff_size - len(self._buff)
 
     def _split(self):
-        split_val = HashSig._break_space.split(self._buff, 1)
-        first_len = len(split_val[0])
-        if len(split_val) == 1:
-            if first_len == 0:
-                return None
-            elif first_len <= HashSig._min_space_to_match:
-                ret_val = split_val[0]
-                self._buff = bytearray()
+        if len(self._buff) > 3 or (0 < len(self._buff) < 4 and not self._has_data):
+            i = 1
+            if self._buff[0] == 0:
+                while i < len(self._buff):
+                    if self._buff[i] != 0:
+                        break
+                    i += 1
+                if i < 3:
+                    ret_val = self._buff[:i]
+                    self._buff[:i] = []
+                    return ret_val
+            elif self._buff[0] == 10:
+                while i < len(self._buff):
+                    if self._buff[i] != 10:
+                        break
+                    i += 1
+                if i < 3:
+                    ret_val = self._buff[:i]
+                    self._buff[:i] = []
+                    return ret_val
+            elif self._buff[0] == 13:
+                while i < len(self._buff):
+                    if i % 2 == 1:
+                        if self._buff[i] != 13:
+                            break
+                    else:
+                        if self._buff[i] != 10:
+                            i -= 1
+                            break
+                    i += 1
+                if i < 3:
+                    ret_val = self._buff[:i]
+                    self._buff[:i] = []
+                    return ret_val
             else:
-                ret_val = self._buff[0:len(self._buff) - HashSig._min_space_to_match]
-                self._buff = self._buff[-HashSig._min_space_to_match:]
-            return ret_val
-        elif len(split_val) == 2:
-            second_len = len(split_val[1])
-            buff_len = len(self._buff)
-            if buff_len == HashSig._min_space_to_match:
-                if first_len == 0 and second_len == 0:
-                    self._buff = bytearray()
-                    return None
-            else:
-                if second_len > 0:
-                    if first_len == 0:
-                        self._buff = bytearray(split_val[1])
-                        return None
-                    self._buff = self._buff[buff_len - second_len - HashSig._min_space_to_match:]
-                else:
-                    self._buff = self._buff[:-HashSig._min_space_to_match]
-                return split_val[0]
+                while i < len(self._buff):
+                    if self._buff[i] == 0 or self._buff[i] == 10 or self._buff == 13:
+                        break
+                    i += 1
+                ret_val = self._buff[:i]
+                self._buff[:i] = []
+                return ret_val
+            self._buff[:i] = []
+            return None
+            # split_val = HashSig._break_space.split(self._buff, 1)
+            # first_len = len(split_val[0])
+            # if len(split_val) == 1:
+            #     if first_len == 0:
+            #         return None
+            #     elif first_len <= HashSig._min_space_to_match:
+            #         ret_val = split_val[0]
+            #         self._buff = bytearray()
+            #     else:
+            #         ret_val = self._buff[0:len(self._buff) - HashSig._min_space_to_match]
+            #         self._buff = self._buff[-HashSig._min_space_to_match:]
+            #     return ret_val
+            # elif len(split_val) == 2:
+            #     second_len = len(split_val[1])
+            #     buff_len = len(self._buff)
+            #     if buff_len == HashSig._min_space_to_match:
+            #         if first_len == 0 and second_len == 0:
+            #             self._buff = bytearray()
+            #             return None
+            #     else:
+            #         if second_len > 0:
+            #             if first_len == 0:
+            #                 self._buff = bytearray(split_val[1])
+            #                 return None
+            #             self._buff = self._buff[buff_len - second_len - HashSig._min_space_to_match:]
+            #         else:
+            #             self._buff = self._buff[:-HashSig._min_space_to_match]
+            #         return split_val[0]
 
     def hash_data(self):
         hasher = Adler32()
@@ -115,11 +159,13 @@ class HashSig:
         self._hashes.append(hasher.finalize())
         while self._has_data or len(self._buff) > 0:
             data = self._split()
+            self._fill_buffer()
             while data is not None:
                 hasher.update(data)
                 self._fill_buffer()
                 data = self._split()
-            if hasher.bytes_seen() < self._parsed_args.m:
+            if hasher.bytes_seen() < self._parsed_args.m or (
+                    len(self._buff) < self._parsed_args.m and not self._has_data):
                 hasher.finalize()
                 continue
             hashed_val = hasher.finalize()
