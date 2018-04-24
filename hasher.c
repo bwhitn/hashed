@@ -13,10 +13,10 @@ const uint32_t buff_size_s       = 128;
 enum           char_match        { NUL=0, LF=10, CR=13 };
 
 
-//This should probably be replaced with the zlib version at some point
+//This Adler32 implementation should probably be replaced with the zlib version at some point
 struct Adler32 {
-    uint16_t high;
-    uint16_t low;
+    uint32_t high;
+    uint32_t low;
     uint32_t size;
 };
 
@@ -112,7 +112,7 @@ uint8_t has_hash(struct Hash *hash, uint32_t hash_val) {
 }
 
 void shuffle_value(struct Hash *hash) {
-    hash->hashes[hash->hash_concat_loc] = hash->hashes[hash->hash_concat_loc] ^ hash->hashes[hash->hash_concat_loc + 1];
+    hash->hashes[hash->hash_concat_loc] ^= hash->hashes[hash->hash_concat_loc + 1];
     uint32_t i = hash->hash_concat_loc;
     for (;i < 20; i++) {
         hash->hashes[i] = hash->hashes[i + 1];
@@ -124,18 +124,18 @@ void shuffle_value(struct Hash *hash) {
     }
 }
 
-// add a hash to the hash values or don't
+// add a hash to the hash values or don't if it is currently one of the values
 void add_hash(struct Hash *hash, uint32_t hash_val) {
-    if (hash->current_hash.size < 8) {
-        return;
-    }
     uint8_t dup_val = has_hash(hash, hash_val);
     if (!dup_val) {
+        char val_85[5];
+        b85_encode(hash_val, val_85);
+        printf("%u\t%.*s\n", hash_val, 5, val_85);
         hash->hashes[hash->hash_size] = hash_val;
         hash->hash_size++;
         if (hash->hash_size == 21) {
             shuffle_value(hash);
-            hash->current_hash.size--;
+            hash->hash_size--;
         }
     }
 }
@@ -188,12 +188,12 @@ uint32_t split_data(struct Hash *hash, uint8_t *data) {
             case CR:
                 while (i < hash->buff_size) {
                     if (i % 2) {
-                    	if (hash->buff[i] != LF) {
-                            i--;
+                        if (hash->buff[i] != CR) {
                             break;
                         }
                     } else {
-                        if (hash->buff[i] != CR) {
+                        if (hash->buff[i] != LF) {
+                            i--;
                             break;
                         }
                     }
@@ -224,7 +224,9 @@ void hash_data(struct Hash *hash, uint32_t to_size) {
         if (data_size) {
             adler32_update(&hash->current_hash, data, data_size);
         } else {
-            add_hash(hash, adler32_finalize(&hash->current_hash));
+            if (hash->current_hash.size > 7 || (hash->finalize_data)) {
+                add_hash(hash, adler32_finalize(&hash->current_hash));
+            }
             adler32_init(&hash->current_hash);
         }
     }
@@ -233,9 +235,8 @@ void hash_data(struct Hash *hash, uint32_t to_size) {
 //TODO: need to add condition for first hash being the first 8 bytes
 //updates the hash with data in the size of data_size
 void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
-    uint32_t location = 0;
+    uint32_t location = move_to_buff(hash, data, data_size, 0);
     if (!hash->hash_size && hash->buff_size > 7) {
-        location = move_to_buff(hash, data, data_size, location);
         uint8_t head_data[8];
         memcpy(head_data, hash->buff, 8);
         adler32_update(&hash->current_hash, head_data, 8);
@@ -257,7 +258,7 @@ uint32_t finalize_hasher(struct Hash *hash, char *data, uint32_t size) {
         uint32_t i = 0;
         for (; i < hash->hash_size; i++) {
             b85_encode(hash->hashes[i], data+(i*6));
-            data[(i * 6) + 6] = 58;
+            data[(i * 6) + 5] = 58;
         }
     } else {
         //if the size is too small return string with colons
@@ -267,46 +268,7 @@ uint32_t finalize_hasher(struct Hash *hash, char *data, uint32_t size) {
     return ret_size;
 }
 
-//test function to verify everything is working correctly
-void test_func(void) {
-    unsigned char wiki[] = "Wikipedia";
-    struct Adler32 adler;
-    printf("String: %s\n", wiki);
-    adler32_init(&adler);
-    adler32_update(&adler, wiki, 9);
-    uint32_t hash_val = adler32_finalize(&adler);
-    printf("Adler32 values: %d\n", hash_val);
-    char enc_val[6];
-    enc_val[5] = 0;
-    b85_encode(hash_val, enc_val);
-    printf("Base85 Encoding: %s\n", enc_val);
-    struct Hash hash;
-    init_hasher(&hash);
-    uint32_t data_size;
-    uint8_t data[128];
-    uint8_t *mystr = (uint8_t *) "test\n\n\n\n\n\n2\0\0";
-    memmove(&hash.buff, mystr, 14);
-    hash.buff_size = 14;
-    while (data_size || hash.buff_size > 4) {
-        data_size = split_data(&hash, data);
-        printf("data size: %d\n", data_size);
-        printf("data: %.*s\n", data_size, data);
-        printf("buff size: %d\n", hash.buff_size);
-        printf("buff:%.*s\n", hash.buff_size, hash.buff);
-    }
-    printf("--- finalize data ---\n");
-    hash.finalize_data = 1;
-    while (hash.buff_size) {
-        data_size = split_data(&hash, data);
-        printf("data size: %d\n", data_size);
-        printf("data: %.*s\n", data_size, data);
-        printf("buff size: %d\n", hash.buff_size);
-        printf("buff:%.*s\n", hash.buff_size, hash.buff);
-    }
-}
-
 int main(int argc, char *argv[]) {
-    test_func();
     if (argc <= 1) {
         return -1;
     }
@@ -315,13 +277,13 @@ int main(int argc, char *argv[]) {
     uint32_t ssize = 2048;
     uint8_t file_buff[ssize];
     FILE *filehashing = fopen(argv[1], "r");
-    size_t ret_val = 0;
-    while (ret_val != EOF) {
-        ret_val = fread(&file_buff, 1, ssize, filehashing);
+    uint16_t ret_val = 0;
+    while ((ret_val = fread(&file_buff, 1, ssize, filehashing))) {
         update_hasher(&hashy_mc_hasherton, file_buff, ret_val);
     }
     fclose(filehashing);
-    char ret_hash_str[120];
-    finalize_hasher(&hashy_mc_hasherton, ret_hash_str, 120);
+    char ret_hash_str[121];
+    uint32_t hash_val_size = finalize_hasher(&hashy_mc_hasherton, ret_hash_str, 120);
+    printf("%.*s\n", hash_val_size, ret_hash_str);
     return 0;
 }

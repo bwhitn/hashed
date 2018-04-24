@@ -119,12 +119,13 @@ class HashSig:
                 hasher.update(data)
                 self._fill_buffer()
                 data = self._split()
-            if hasher.bytes_seen() < self._parsed_args.m:
+            if hasher.bytes_seen() <= self._parsed_args.m:
                 hasher.finalize()
                 continue
             hashed_val = hasher.finalize()
             # Don't allow identical hashes to be constantly added
             if hashed_val not in self._hashes:
+                print("{}\t{}".format(hashed_val, _encb85(hashed_val)))
                 self._hashes.append(hashed_val)
                 if len(self._hashes) > self._parsed_args.s:
                     _hash_a = self._hashes[self._hash_comp_loc]
