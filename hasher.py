@@ -119,7 +119,7 @@ class HashSig:
                 hasher.update(data)
                 self._fill_buffer()
                 data = self._split()
-            if hasher.bytes_seen() <= self._parsed_args.m:
+            if hasher.bytes_seen() < self._parsed_args.m:
                 hasher.finalize()
                 continue
             hashed_val = hasher.finalize()
@@ -128,11 +128,8 @@ class HashSig:
                 print("{}\t{}".format(hashed_val, _encb85(hashed_val)))
                 self._hashes.append(hashed_val)
                 if len(self._hashes) > self._parsed_args.s:
-                    _hash_a = self._hashes[self._hash_comp_loc]
-                    _hash_b = self._hashes[self._hash_comp_loc + 1]
-                    self._hashes.remove(_hash_a)
-                    self._hashes.remove(_hash_b)
-                    self._hashes.insert(self._hash_comp_loc, _hash_a ^ _hash_b)
+                    self._hashes[self._hash_comp_loc] ^= self._hashes[self._hash_comp_loc + 1]
+                    del self._hashes[self._hash_comp_loc + 1]
                     self._hash_comp_loc = (self._hash_comp_loc + 1) % self._parsed_args.s
                     if self._hash_comp_loc < 1:
                         self._hash_comp_loc = 1
