@@ -153,7 +153,7 @@ uint32_t set_data_move_buff(struct Hash *hash, uint8_t *data, uint32_t size) {
             size = hash->buff_size - 4;
         }
     }
-    memmove(data, hash->buff, size);
+    memcpy(data, hash->buff, size);
     remove_nbuff_bytes(hash, size);
     return size;
 }
@@ -219,20 +219,22 @@ uint32_t split_data(struct Hash *hash, uint8_t *data) {
 
 void hash_data(struct Hash *hash, uint32_t to_size) {
     uint8_t data[buff_size_s];
-    while (hash->buff_size > to_size) {
+    while (hash->buff_size > to_size || (!hash->buff_size && !to_size && hash->current_hash.size)) {
         uint32_t data_size = split_data(hash, data);
         if (data_size) {
             adler32_update(&hash->current_hash, data, data_size);
         } else {
-            if (hash->current_hash.size > 7 || (hash->finalize_data)) {
+            if (hash->current_hash.size > 7) {
                 add_hash(hash, adler32_finalize(&hash->current_hash));
+            }
+            if (!hash->buff_size) {
+                hash->buff_size = to_size;
             }
             adler32_init(&hash->current_hash);
         }
     }
 }
 
-//TODO: need to add condition for first hash being the first 8 bytes
 //updates the hash with data in the size of data_size
 void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
     uint32_t location = move_to_buff(hash, data, data_size, 0);
@@ -258,11 +260,10 @@ uint32_t finalize_hasher(struct Hash *hash, char *data, uint32_t size) {
         uint32_t i = 0;
         for (; i < hash->hash_size; i++) {
             b85_encode(hash->hashes[i], data+(i*6));
-            data[(i * 6) + 5] = 58;
+            if (i+1 < hash->hash_size) {
+                data[(i * 6) + 5] = 58;
+            }
         }
-    } else {
-        //if the size is too small return string with colons
-        memset(data, 58, size - 1);
     }
     data[size - 1] = 0;
     return ret_size;
