@@ -188,11 +188,11 @@ uint32_t split_data(struct Hash *hash, uint8_t *data) {
             case CR:
                 while (i < hash->buff_size) {
                     if (i % 2) {
-                        if (hash->buff[i] != CR) {
+                        if (hash->buff[i] != LF) {
                             break;
                         }
                     } else {
-                        if (hash->buff[i] != LF) {
+                        if (hash->buff[i] != CR) {
                             i--;
                             break;
                         }
@@ -219,7 +219,7 @@ uint32_t split_data(struct Hash *hash, uint8_t *data) {
 
 void hash_data(struct Hash *hash, uint32_t to_size) {
     uint8_t data[buff_size_s];
-    while (hash->buff_size > to_size || (!hash->buff_size && !to_size && hash->current_hash.size)) {
+    while (hash->buff_size > to_size || (!to_size && hash->current_hash.size)) {
         uint32_t data_size = split_data(hash, data);
         if (data_size) {
             adler32_update(&hash->current_hash, data, data_size);
