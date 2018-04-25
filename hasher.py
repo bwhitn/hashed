@@ -131,23 +131,22 @@ class HashSig:
         print("{}\t{}".format(hashed_val, _encb85(hashed_val)))
         self._hashes.append(hashed_val)
         while self._has_data or len(self._buff) > 0:
-            data = self._split()
+            data = b''
             self._fill_buffer()
             while data is not None:
                 hasher.update(data)
                 self._fill_buffer()
                 data = self._split()
-            if hasher.bytes_seen() < self._parsed_args.m or (len(self._buff) < self._parsed_args.m and not self._has_data):
-                hasher.finalize()
-                continue
+                if data is None and hasher.bytes_seen() < self._parsed_args.m:
+                    hasher.finalize()
+                    data = b''
             hashed_val = hasher.finalize()
             # Don't allow identical hashes to be constantly added
             if hashed_val not in self._hashes:
                 print("{}\t{}".format(hashed_val, _encb85(hashed_val)))
                 self._hashes.append(hashed_val)
                 if len(self._hashes) > self._parsed_args.s:
-                    self._hashes[self._hash_comp_loc] ^= self._hashes[self._hash_comp_loc + 1]
-                    del self._hashes[self._hash_comp_loc + 1]
+                    self._hashes[self._hash_comp_loc] ^= self._hashes.pop(self._hash_comp_loc + 1)
                     self._hash_comp_loc = (self._hash_comp_loc + 1) % self._parsed_args.s
                     if self._hash_comp_loc < 1:
                         self._hash_comp_loc = 1
