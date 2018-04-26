@@ -168,7 +168,7 @@ def _format_hash(hash_list):
     ret_val = []
     for hash_val in hash_list:
         ret_val.append(_encb85(hash_val))
-    return ":".join(ret_val)
+    return "-".join(ret_val)
 
 
 def print_hashes(file_path, parsinfo, rec=False):

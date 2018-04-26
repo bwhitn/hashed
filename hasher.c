@@ -258,7 +258,7 @@ uint32_t finalize_hasher(struct Hash *hash, char *data, uint32_t size) {
         for (; i < hash->hash_size; i++) {
             b85_encode(hash->hashes[i], data+(i*6));
             if (i+1 < hash->hash_size) {
-                data[(i * 6) + 5] = 58;
+                data[(i * 6) + 5] = 45;
             }
         }
     }
