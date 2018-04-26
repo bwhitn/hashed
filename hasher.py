@@ -41,7 +41,7 @@ class Adler32:
         return self._bytes
 
     def finalize(self):
-        ret_val = (self._high << 16 | self._low) & 0xffffffff
+        ret_val = ((self._high << 16) | self._low) & 0xffffffff
         self._high = 0
         self._low = 1
         self._bytes = 0
@@ -128,7 +128,7 @@ class HashSig:
         self._fill_buffer()
         hasher.update(self._buff[:8])
         hashed_val = hasher.finalize()
-        print("{}\t{}".format(hashed_val, _encb85(hashed_val)))
+        #print("{}\t{}".format(hashed_val, _encb85(hashed_val)))
         self._hashes.append(hashed_val)
         while self._has_data or len(self._buff) > 0:
             data = b''
@@ -143,12 +143,14 @@ class HashSig:
             hashed_val = hasher.finalize()
             # Don't allow identical hashes to be constantly added
             if hashed_val not in self._hashes:
-                print("{}\t{}".format(hashed_val, _encb85(hashed_val)))
+                #print("{}\t{}".format(hashed_val, _encb85(hashed_val)))
                 self._hashes.append(hashed_val)
                 if len(self._hashes) > self._parsed_args.s:
+                    print("{}\t{}".format(self._hash_comp_loc, self._hash_comp_loc + 1))
                     self._hashes[self._hash_comp_loc] ^= self._hashes.pop(self._hash_comp_loc + 1)
+                    print("{}\t{}".format(self._hashes[self._hash_comp_loc], _encb85(self._hashes[self._hash_comp_loc])))
                     self._hash_comp_loc = (self._hash_comp_loc + 1) % self._parsed_args.s
-                    if self._hash_comp_loc < 1:
+                    if self._hash_comp_loc == 0:
                         self._hash_comp_loc = 1
         return self._hashes
 
@@ -182,14 +184,15 @@ def print_hashes(file_path, parsinfo, rec=False):
         file_ctx = _openfile(globbed_file, parsinfo.a, parsinfo.b)
         if file_ctx is not None:
             hashy_mc_hasherton = HashSig(file_ctx, parsinfo)
-            print("{}\t{}".format(_format_hash(hashy_mc_hasherton.hash_data()), globbed_file))
+            print("{}".format(_format_hash(hashy_mc_hasherton.hash_data())))
 
 
 def arg():
     _parser = argparse.ArgumentParser(description="File Stream Hasher")
     _parser.add_argument('-a', '-min', type=int, default=0, help="Minimum size of file. default: 0")
     _parser.add_argument('-b', '-max', type=int, default=(1 << 24), help="Maximum size of file. default: 2^24")
-    _parser.add_argument('-m', '-minsize', type=int, default=8, help="Minimum bytes that will generate a hash. default: 8")
+    _parser.add_argument('-m', '-minsize', type=int, default=8, help="Minimum bytes that will generate a hash. "
+                                                                     "default: 8")
     _parser.add_argument('-r', '-recursive', action='store_const', const=True, help="Hash files recursively")
     _parser.add_argument('-s', '-maxhash', type=int, default=(1 << 24),
                          help="Maximum size of hash to create. min: 2, default: 2^24")

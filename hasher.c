@@ -112,12 +112,16 @@ uint8_t has_hash(struct Hash *hash, uint32_t hash_val) {
 }
 
 void shuffle_value(struct Hash *hash) {
+    printf("%u\t%u\n", hash->hash_concat_loc, hash->hash_concat_loc + 1);
     hash->hashes[hash->hash_concat_loc] ^= hash->hashes[hash->hash_concat_loc + 1];
+    char val_85[5];
+    b85_encode(hash->hashes[hash->hash_concat_loc], val_85);
+    printf("%u\t%.*s\n", hash->hashes[hash->hash_concat_loc], 5, val_85);
     uint32_t i = hash->hash_concat_loc;
-    for (;i < 20; i++) {
+    for (;i < 21; i++) {
         hash->hashes[i] = hash->hashes[i + 1];
     }
-    if (hash->hash_concat_loc == 20) {
+    if (hash->hash_concat_loc == 19) {
         hash->hash_concat_loc = 1;
     } else {
         hash->hash_concat_loc++;
@@ -128,9 +132,9 @@ void shuffle_value(struct Hash *hash) {
 void add_hash(struct Hash *hash, uint32_t hash_val) {
     uint8_t dup_val = has_hash(hash, hash_val);
     if (!dup_val) {
-        char val_85[5];
-        b85_encode(hash_val, val_85);
-        printf("%u\t%.*s\n", hash_val, 5, val_85);
+        //char val_85[5];
+        //b85_encode(hash_val, val_85);
+        //printf("%u\t%.*s\n", hash_val, 5, val_85);
         hash->hashes[hash->hash_size] = hash_val;
         hash->hash_size++;
         if (hash->hash_size == 21) {
