@@ -128,7 +128,6 @@ class HashSig:
         self._fill_buffer()
         hasher.update(self._buff[:8])
         hashed_val = hasher.finalize()
-        #print("{}\t{}".format(hashed_val, _encb85(hashed_val)))
         self._hashes.append(hashed_val)
         while self._has_data or len(self._buff) > 0:
             data = b''
@@ -143,12 +142,9 @@ class HashSig:
             hashed_val = hasher.finalize()
             # Don't allow identical hashes to be constantly added
             if hashed_val not in self._hashes:
-                #print("{}\t{}".format(hashed_val, _encb85(hashed_val)))
                 self._hashes.append(hashed_val)
                 if len(self._hashes) > self._parsed_args.s:
-                    print("{}\t{}".format(self._hash_comp_loc, self._hash_comp_loc + 1))
                     self._hashes[self._hash_comp_loc] ^= self._hashes.pop(self._hash_comp_loc + 1)
-                    print("{}\t{}".format(self._hashes[self._hash_comp_loc], _encb85(self._hashes[self._hash_comp_loc])))
                     self._hash_comp_loc = (self._hash_comp_loc + 1) % self._parsed_args.s
                     if self._hash_comp_loc == 0:
                         self._hash_comp_loc = 1
@@ -184,7 +180,7 @@ def print_hashes(file_path, parsinfo, rec=False):
         file_ctx = _openfile(globbed_file, parsinfo.a, parsinfo.b)
         if file_ctx is not None:
             hashy_mc_hasherton = HashSig(file_ctx, parsinfo)
-            print("{}".format(_format_hash(hashy_mc_hasherton.hash_data())))
+            print("{}\t{}\n".format(_format_hash(hashy_mc_hasherton.hash_data(), glob_file)))
 
 
 def arg():
