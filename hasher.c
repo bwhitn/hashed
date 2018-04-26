@@ -6,7 +6,7 @@
 const uint8_t  num_of_hashes     = 20;
 const uint32_t min_hash_bytes    = 8;
 const uint32_t e_b85_divisors[5] = {52200625, 614125, 7225, 85, 1};
-const char     *e_b85_chars      = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-_?+=^!/*&<>()[]{}@%$~";
+const char     *e_b85_chars      = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.:_?+=^!/*&<>()[]{}@%$~";
 const uint32_t adler32_mod_val   = 65521;
 const uint32_t buff_size_s       = 128;
 // 4 nulls, 4 LF, 2 CRLF

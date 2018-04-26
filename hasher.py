@@ -10,7 +10,7 @@ from sys import version_info, stderr
 # Distributed under the terms of the Modified BSD License.
 
 # Z85CHARS is the base 85 symbol table with minor change
-Z85CHARS = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-_?+=^!/*&<>()[]{}@%$~"
+Z85CHARS = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.:_?+=^!/*&<>()[]{}@%$~"
 _85s = [85 ** i for i in range(5)][::-1]
 
 
