@@ -20,6 +20,8 @@ struct Adler32 {
     uint32_t size;
 };
 
+// TODO: change buff to pointer and buff_size to the size of the buff,tail of last buff 4 bytes and last size, and buff_loc
+// TODO: remove as many memmove and memcpy as possible
 // buff is the hash buffer, buff size is the current size of data on the buffer, hashes is the array that contains
 // the hashes, hash_size is the number of hashes in hashes, hash_concat_loc is the current location used for concating
 // hashes, finalize_data says wether it should expect more data, current_hash is the current hash.
@@ -94,9 +96,6 @@ uint32_t move_to_buff(struct Hash *hash, uint8_t *data, uint32_t data_size, uint
             }
         }
     }
-    if(location > 2048) {
-        exit(0);
-    }
     return location;
 }
 
@@ -113,14 +112,13 @@ uint8_t has_hash(struct Hash *hash, uint32_t hash_val) {
 
 void shuffle_value(struct Hash *hash) {
     hash->hashes[hash->hash_concat_loc] ^= hash->hashes[hash->hash_concat_loc + 1];
-    uint32_t i = hash->hash_concat_loc+1;
+    uint32_t i = ++hash->hash_concat_loc;
+    //TODO: replace with memmove
     for (;i < 20; i++) {
         hash->hashes[i] = hash->hashes[i + 1];
     }
-    if (hash->hash_concat_loc == 19) {
+    if (hash->hash_concat_loc == 20) {
         hash->hash_concat_loc = 1;
-    } else {
-        hash->hash_concat_loc++;
     }
 }
 
@@ -140,7 +138,7 @@ void add_hash(struct Hash *hash, uint32_t hash_val) {
 //remove the n number of bytes from the head of the buffer and reposition the data.
 void remove_nbuff_bytes(struct Hash *hash, uint32_t size) {
     memmove(hash->buff, hash->buff + size, hash->buff_size - size);
-    hash->buff_size -= size;
+    hlonash->buff_size -= size;
 }
 
 //move bytes to data and adjust the buffer. May not move the exact size. Will return the number of bytes moved.
@@ -249,20 +247,20 @@ void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
 }
 
 //finalize the hash. data should be large enough to store the hash. return value is the hash size in bytes
-uint32_t finalize_hasher(struct Hash *hash, char *data, uint32_t size) {
+uint32_t finalize_hasher(struct Hash *hash, char *hash_val, uint32_t size) {
     hash->finalize_data = 1;
     hash_data(hash, 0);
     uint32_t ret_size = hash->hash_size * 6;
     if (size >= ret_size) {
         uint32_t i = 0;
         for (; i < hash->hash_size; i++) {
-            b85_encode(hash->hashes[i], data+(i*6));
+            b85_encode(hash->hashes[i], hash_val+(i*6));
             if (i+1 < hash->hash_size) {
-                data[(i * 6) + 5] = 45;
+                hash_val[(i * 6) + 5] = 45;
             }
         }
     }
-    data[size - 1] = 0;
+    hash_val[size - 1] = 0;
     return ret_size;
 }
 
