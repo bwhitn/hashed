@@ -180,7 +180,7 @@ def print_hashes(file_path, parsinfo, rec=False):
         file_ctx = _openfile(globbed_file, parsinfo.a, parsinfo.b)
         if file_ctx is not None:
             hashy_mc_hasherton = HashSig(file_ctx, parsinfo)
-            print("{}\t{}\n".format(_format_hash(hashy_mc_hasherton.hash_data(), glob_file)))
+            print("{}\t{}\n".format(_format_hash(hashy_mc_hasherton.hash_data()), globbed_file))
 
 
 def arg():
