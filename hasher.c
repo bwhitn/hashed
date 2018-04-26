@@ -112,13 +112,14 @@ uint8_t has_hash(struct Hash *hash, uint32_t hash_val) {
 }
 
 void shuffle_value(struct Hash *hash) {
+    printf("%u\t%u\n", hash->hashes[hash->hash_concat_loc], hash->hashes[hash->hash_concat_loc + 1]);
     printf("%u\t%u\n", hash->hash_concat_loc, hash->hash_concat_loc + 1);
     hash->hashes[hash->hash_concat_loc] ^= hash->hashes[hash->hash_concat_loc + 1];
     char val_85[5];
     b85_encode(hash->hashes[hash->hash_concat_loc], val_85);
     printf("%u\t%.*s\n", hash->hashes[hash->hash_concat_loc], 5, val_85);
-    uint32_t i = hash->hash_concat_loc;
-    for (;i < 21; i++) {
+    uint32_t i = hash->hash_concat_loc+1;
+    for (;i < 20; i++) {
         hash->hashes[i] = hash->hashes[i + 1];
     }
     if (hash->hash_concat_loc == 19) {
