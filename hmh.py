@@ -126,7 +126,11 @@ class HashSig:
     def hash_data(self):
         hasher = Adler32()
         self._fill_buffer()
-        hasher.update(self._buff[:8])
+        if len(self._buff) > 8 :
+            _size = 8
+        else:
+            _size = len(self._buff)
+        hasher.update(self._buff[:_size])
         hashed_val = hasher.finalize()
         self._hashes.append(hashed_val)
         while self._has_data or len(self._buff) > 0:
@@ -138,8 +142,10 @@ class HashSig:
                 data = self._split()
                 if data is None and hasher.bytes_seen() < self._parsed_args.m:
                     hasher.finalize()
-                    data = b''
-            hashed_val = hasher.finalize()
+                    if self._has_data:
+                        data = b''
+            if hasher.bytes_seen() >= self._parsed_args.m:
+                hashed_val = hasher.finalize()
             # Don't allow identical hashes to be constantly added
             if hashed_val not in self._hashes:
                 self._hashes.append(hashed_val)

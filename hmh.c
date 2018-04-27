@@ -21,7 +21,7 @@ struct Adler32 {
 };
 
 // TODO: change buff to pointer and buff_size to the size of the buff,tail of last buff 4 bytes and last size, and buff_loc
-// TODO: remove as many memmove and memcpy as possible
+// TODO: remove as many memmove and memcpy as possible in place of pointers
 // buff is the hash buffer, buff size is the current size of data on the buffer, hashes is the array that contains
 // the hashes, hash_size is the number of hashes in hashes, hash_concat_loc is the current location used for concating
 // hashes, finalize_data says wether it should expect more data, current_hash is the current hash.
@@ -138,7 +138,7 @@ void add_hash(struct Hash *hash, uint32_t hash_val) {
 //remove the n number of bytes from the head of the buffer and reposition the data.
 void remove_nbuff_bytes(struct Hash *hash, uint32_t size) {
     memmove(hash->buff, hash->buff + size, hash->buff_size - size);
-    hlonash->buff_size -= size;
+    hash->buff_size -= size;
 }
 
 //move bytes to data and adjust the buffer. May not move the exact size. Will return the number of bytes moved.
@@ -230,15 +230,27 @@ void hash_data(struct Hash *hash, uint32_t to_size) {
     }
 }
 
+void check_first_hash(struct Hash *hash) {
+    if (hash->buff_size > 7 || hash->finalize_data) {
+        uint8_t head_data[8];
+        uint8_t size;
+        if (hash->buff_size > 8) {
+            size = 8;
+        } else {
+            size = hash->buff_size;
+        }
+        memcpy(head_data, hash->buff, size);
+        adler32_update(&hash->current_hash, head_data, size);
+        add_hash(hash, adler32_finalize(&hash->current_hash));
+        adler32_init(&hash->current_hash);
+    }
+}
+
 //updates the hash with data in the size of data_size
 void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
     uint32_t location = move_to_buff(hash, data, data_size, 0);
-    if (!hash->hash_size && hash->buff_size > 7) {
-        uint8_t head_data[8];
-        memcpy(head_data, hash->buff, 8);
-        adler32_update(&hash->current_hash, head_data, 8);
-        add_hash(hash, adler32_finalize(&hash->current_hash));
-        adler32_init(&hash->current_hash);
+    if (!hash->hash_size) {
+        check_first_hash(hash);
     }
     while (location < data_size) {
         location = move_to_buff(hash, data, data_size, location);
@@ -249,6 +261,9 @@ void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
 //finalize the hash. data should be large enough to store the hash. return value is the hash size in bytes
 uint32_t finalize_hasher(struct Hash *hash, char *hash_val, uint32_t size) {
     hash->finalize_data = 1;
+    if (!hash->hash_size) {
+        check_first_hash(hash);
+    }
     hash_data(hash, 0);
     uint32_t ret_size = hash->hash_size * 6;
     if (size >= ret_size) {
