@@ -21,13 +21,16 @@ struct Adler32 {
 };
 
 // TODO: change buff to pointer and buff_size to the size of the buff,tail of last buff 4 bytes and last size, and buff_loc
-// TODO: remove as many memmove and memcpy as possible in place of pointers
+// TODO: remove as many memmove and memcpy as possible
 // buff is the hash buffer, buff size is the current size of data on the buffer, hashes is the array that contains
 // the hashes, hash_size is the number of hashes in hashes, hash_concat_loc is the current location used for concating
 // hashes, finalize_data says wether it should expect more data, current_hash is the current hash.
 struct Hash {
-    uint8_t        buff[128]; //Should be the same size as value of buff_size_s
+    uint8_t        *buff; //Should be the same size as value of buff_size_s
     uint32_t       buff_size;
+    uint8_t        prev_buff[4];
+    uint32_t       prev_buff_size;
+    uint32_t       curr_buff_pos; // 0 to buff_size - 1 + 4
     uint32_t       hashes[21];
     uint8_t        hash_size;
     uint8_t        hash_concat_loc;
@@ -135,22 +138,102 @@ void add_hash(struct Hash *hash, uint32_t hash_val) {
     }
 }
 
-//remove the n number of bytes from the head of the buffer and reposition the data.
-void remove_nbuff_bytes(struct Hash *hash, uint32_t size) {
-    memmove(hash->buff, hash->buff + size, hash->buff_size - size);
-    hash->buff_size -= size;
-}
-
-//move bytes to data and adjust the buffer. May not move the exact size. Will return the number of bytes moved.
-uint32_t set_data_move_buff(struct Hash *hash, uint8_t *data, uint32_t size) {
-    if (size >= hash->buff_size) {
-        if (!hash->finalize_data) {
-            size = hash->buff_size - 4;
+void hash_data_move_buff(struct Hash *hash, uint32_t size) {
+    if (hash->prev_buff_size == 0) {
+        adler32_update(&hash->current_hash, hash->buff + hash->curr_buff_pos, size);
+    } else {
+        // TODO: need to fix these
+        if (size >= hash->prev_buff_size) {
+            adler32_update(&hash->current_hash, hash->prev_buff + hash->curr_buff_pos, size);
+        } else {
+            adler32_update(&hash->current_hash, , );
+            memcpy(data, hash->prev_buff + hash->curr_buff_pos, hash->prev_buff_size - hash->curr_buff_pos);
+            memcpy(data, hash->buff , size);
         }
     }
-    memcpy(data, hash->buff, size);
-    remove_nbuff_bytes(hash, size);
-    return size;
+}
+
+// move bytes to data starting at curr_buff_pos to curr_buff + size.
+// if prev_buff_size == 0 location is offset of buff otherwise it is offset of buff + prev_buff offset
+// TODO: We don't need the data buff. We could move directly to the hashing.
+// old comment: May not move the exact size. Will return the number of bytes moved.
+void set_data_move_buff(struct Hash *hash, uint32_t size) {
+    if (hash->curr_buff_pos == hash->buff_size + hash->prev_buff_size) {
+        if (!hash->finalize_data) {
+            size = hash->prev_buff_size + hash->buff_size - 4;
+        }
+    }
+    hash_data_move_buff(hash, size);
+    hash->curr_buff_pos += size;
+}
+
+// TODO: need to change i to
+uint32_t nul_lf_check(struct Hash *hash, uint8_t char_val) {
+    uint32_t i = 1;
+    while (i < hash->prev_buff_size) {
+        if (hash->prev_buff[i]) {
+            return i;
+        }
+        i++;
+    }
+    i = 0;
+    while (i < hash->buff_size) {
+        if (hash->buff[i] != char_val) {
+            return i + hash->prev_buff_size;
+        }
+        i++;
+    }
+    return i;
+}
+
+uint32_t crlf_check(struct Hash *hash) {
+    uint32_t i = 1;
+    while (i < hash->prev_buff_size) {
+        if (i % 2) {
+            if (hash->prev_buff[i] != LF) {
+                return i;
+            }
+        } else {
+            if (hash->prev_buff[i] != CR) {
+                i--;
+                return i;
+            }
+        }
+        i++;
+    }
+    i = 0;
+    while (i < hash->buff_size) {
+        if (i % 2) {
+            if (hash->buff[i] != LF) {
+                return i + hash->prev_buff_size;
+            }
+        } else {
+            if (hash->buff[i] != CR) {
+                i--;
+                return i + hash->prev_buff_size;
+            }
+        }
+        i++;
+    }
+    return i;
+}
+
+uint32_t non_nul_lf_cr_check(struct Hash *hash) {
+    uint32_t i = 1;
+    while (i < hash->prev_buff_size) {
+        if (hash->buff[i] == NUL || hash->buff[i] == LF || hash->buff[i] == CR) {
+            return i;
+        }
+        i++;
+    }
+    i = 0;
+    while (i < hash->buff_size) {
+        if (hash->buff[i] == NUL || hash->buff[i] == LF || hash->buff[i] == CR) {
+            return i + hash->prev_buff_size;
+        }
+        i++;
+    }
+    return i;
 }
 
 //split data from the buffer return the size and set the value of data.
@@ -159,55 +242,28 @@ uint32_t split_data(struct Hash *hash, uint8_t *data) {
         uint32_t i = 1;
         switch(hash->buff[0]) {
             case NUL:
-                while (i < hash->buff_size) {
-                    if (hash->buff[i] != NUL) {
-                        break;
-                    }
-                    i++;
-                }
+                i = nul_lf_check(hash, NUL);
                 if (i > 3) {
                     break;
                 }
-                return set_data_move_buff(hash, data, i);
+                return set_data_move_buff(hash, i);
             case LF:
-                while (i < hash->buff_size) {
-                    if (hash->buff[i] != LF) {
-                        break;
-                    }
-                    i++;
-                }
+                i = nul_lf_check(hash, LF);
                 if (i > 3) {
                     break;
                 }
-                return set_data_move_buff(hash, data, i);
+                return set_data_move_buff(hash, i);
             case CR:
-                while (i < hash->buff_size) {
-                    if (i % 2) {
-                        if (hash->buff[i] != LF) {
-                            break;
-                        }
-                    } else {
-                        if (hash->buff[i] != CR) {
-                            i--;
-                            break;
-                        }
-                    }
-                    i++;
-                }
+                i = crlf_check(hash);
                 if (i > 3) {
                     break;
                 }
-                return set_data_move_buff(hash, data, i);
+                return set_data_move_buff(hash, i);
             default:
-                while (i < hash->buff_size) {
-                    if (hash->buff[i] == NUL || hash->buff[i] == LF || hash->buff[i] == CR) {
-                        break;
-                    }
-                    i++;
-                }
-                return set_data_move_buff(hash, data, i);
+                i = non_nul_lf_cr_check(hash);
+                return hash_data_move_buff(hash, i);
         }
-        remove_nbuff_bytes(hash, i);
+        hash->curr_buff_pos + i;
     }
     return 0;
 }
