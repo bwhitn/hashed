@@ -28,9 +28,9 @@ struct Adler32 {
 struct Hash {
     uint8_t        *buff; //Should be the same size as value of buff_size_s
     uint32_t       buff_size;
-    uint8_t        prev_buff[4];
+    uint8_t        prev_buff[8];
     uint32_t       prev_buff_size;
-    uint32_t       curr_buff_pos; // 0 to buff_size - 1 + 4
+    uint32_t       curr_buff_pos; // 0 to buff_size + prev_buff_size. if max it means buff is empty.
     uint32_t       hashes[21];
     uint8_t        hash_size;
     uint8_t        hash_concat_loc;
@@ -76,30 +76,11 @@ void b85_encode(uint32_t hash, char *enc_hash) {
 void init_hasher(struct Hash *hash) {
     hash->hash_size = 0;
     hash->hash_concat_loc = 1;
+    hash->prev_buff_size = 0;
+    hash->curr_buff_pos = 0;
     hash->buff_size = 0;
     hash->finalize_data = 0;
     adler32_init(&hash->current_hash);
-}
-
-//move data starting at location to the end of hash buff and return the next location for reading data.
-//if the next location is greater than or equal to the data size then all of the data has been read.
-uint32_t move_to_buff(struct Hash *hash, uint8_t *data, uint32_t data_size, uint32_t location) {
-    if ((buff_size_s > hash->buff_size) || (data_size > location)) {
-        uint32_t buff_left = buff_size_s - hash->buff_size;
-        uint32_t data_left = data_size - location;
-        if (buff_left) {
-            if (buff_left > data_left) {
-                memcpy(hash->buff + hash->buff_size, data + location, data_left);
-                hash->buff_size += data_left;
-                return data_size;
-            } else {
-                memcpy(hash->buff + hash->buff_size, data + location, buff_left);
-                hash->buff_size += buff_left;
-                return location + buff_left;
-            }
-        }
-    }
-    return location;
 }
 
 // are we adding a duplicate hash?
@@ -141,15 +122,25 @@ void add_hash(struct Hash *hash, uint32_t hash_val) {
 void hash_data_move_buff(struct Hash *hash, uint32_t size) {
     if (hash->prev_buff_size == 0) {
         adler32_update(&hash->current_hash, hash->buff + hash->curr_buff_pos, size);
+        hash->curr_buff_pos += size;
+        hash->buff_size -= size;
+        printf("test A  %u  %u  %u\n", size, hash->curr_buff_pos, hash->buff_size);
+    // we determined that we have some prev hash to move. Do we have current_hash to move?
+    // if size <= prev_buff_size then hash the prev buff and remove the size from curr_buff_pos and prev_buff_size
+    // TODO: need to fix prev_buff alignment
+    } else  if (size <= hash->prev_buff_size) {
+        adler32_update(&hash->current_hash, hash->prev_buff + hash->curr_buff_pos, size);
+        hash->prev_buff_size -= size;
+        printf("test B  %u  %u  %u\n", size, hash->prev_buff_size, hash->curr_buff_pos);
     } else {
-        // TODO: need to fix these
-        if (size >= hash->prev_buff_size) {
-            adler32_update(&hash->current_hash, hash->prev_buff + hash->curr_buff_pos, size);
-        } else {
-            adler32_update(&hash->current_hash, , );
-            memcpy(data, hash->prev_buff + hash->curr_buff_pos, hash->prev_buff_size - hash->curr_buff_pos);
-            memcpy(data, hash->buff , size);
-        }
+        //else hash prev_buff and current buff and set prev_buff_size = 0
+        printf("test C  %u\n", size);
+        adler32_update(&hash->current_hash, hash->prev_buff + (8 - hash->prev_buff_size), hash->prev_buff_size);
+        size -= hash->prev_buff_size;
+        hash->curr_buff_pos -= hash->prev_buff_size;
+        hash->prev_buff_size = 0;
+        adler32_update(&hash->current_hash, hash->buff + hash->curr_buff_pos, size);
+        hash->curr_buff_pos += size;
     }
 }
 
@@ -157,7 +148,7 @@ void hash_data_move_buff(struct Hash *hash, uint32_t size) {
 // if prev_buff_size == 0 location is offset of buff otherwise it is offset of buff + prev_buff offset
 // TODO: We don't need the data buff. We could move directly to the hashing.
 // old comment: May not move the exact size. Will return the number of bytes moved.
-void set_data_move_buff(struct Hash *hash, uint32_t size) {
+void check_data_size_before_hashing(struct Hash *hash, uint32_t size) {
     if (hash->curr_buff_pos == hash->buff_size + hash->prev_buff_size) {
         if (!hash->finalize_data) {
             size = hash->prev_buff_size + hash->buff_size - 4;
@@ -237,7 +228,7 @@ uint32_t non_nul_lf_cr_check(struct Hash *hash) {
 }
 
 //split data from the buffer return the size and set the value of data.
-uint32_t split_data(struct Hash *hash, uint8_t *data) {
+uint8_t split_data(struct Hash *hash) {
     if (hash->buff_size > 3 || (hash->finalize_data && hash->buff_size)) {
         uint32_t i = 1;
         switch(hash->buff[0]) {
@@ -246,35 +237,39 @@ uint32_t split_data(struct Hash *hash, uint8_t *data) {
                 if (i > 3) {
                     break;
                 }
-                return set_data_move_buff(hash, i);
+                check_data_size_before_hashing(hash, i);
+                return 1;
             case LF:
                 i = nul_lf_check(hash, LF);
                 if (i > 3) {
                     break;
                 }
-                return set_data_move_buff(hash, i);
+                check_data_size_before_hashing(hash, i);
+                return 1;
             case CR:
                 i = crlf_check(hash);
                 if (i > 3) {
                     break;
                 }
-                return set_data_move_buff(hash, i);
+                check_data_size_before_hashing(hash, i);
+                return 1;
             default:
                 i = non_nul_lf_cr_check(hash);
-                return hash_data_move_buff(hash, i);
+                hash_data_move_buff(hash, i);
+                return 1;
         }
         hash->curr_buff_pos + i;
     }
     return 0;
 }
 
+
 void hash_data(struct Hash *hash, uint32_t to_size) {
-    uint8_t data[buff_size_s];
-    while (hash->buff_size > to_size || (!to_size && hash->current_hash.size)) {
-        uint32_t data_size = split_data(hash, data);
-        if (data_size) {
-            adler32_update(&hash->current_hash, data, data_size);
-        } else {
+    while (hash->buff_size + hash->prev_buff_size > to_size || (!to_size && hash->current_hash.size)) {
+        printf("I am in a hash data loop.  %u  %u\n", hash->curr_buff_pos, hash->prev_buff_size);
+        uint8_t data_was_hashed = split_data(hash);
+        if (!data_was_hashed) {
+            printf("there was a split");
             if (hash->current_hash.size > 7) {
                 add_hash(hash, adler32_finalize(&hash->current_hash));
             }
@@ -286,17 +281,23 @@ void hash_data(struct Hash *hash, uint32_t to_size) {
     }
 }
 
+//TODO: need to move data to prev_buff if we can not create the first hash and not finalizing.
 void check_first_hash(struct Hash *hash) {
-    if (hash->buff_size > 7 || hash->finalize_data) {
+    if (hash->buff_size + hash->prev_buff_size > 7 || hash->finalize_data) {
         uint8_t head_data[8];
-        uint8_t size;
-        if (hash->buff_size > 8) {
+        uint32_t size;
+        if (hash->current_hash.size + hash->prev_buff_size >= 8) {
             size = 8;
         } else {
-            size = hash->buff_size;
+            size = hash->prev_buff_size + hash->buff_size;
         }
-        memcpy(head_data, hash->buff, size);
-        adler32_update(&hash->current_hash, head_data, size);
+        // TODO: can remove this in place of direct hashing without changing buff size or location
+        if (hash->prev_buff_size > 0) {
+            adler32_update(&hash->current_hash, hash->prev_buff + hash->curr_buff_pos, hash->prev_buff_size);
+        }
+        if (size > hash->prev_buff_size && hash->buff_size > size - hash->prev_buff_size) {
+            adler32_update(&hash->current_hash, hash->buff + (hash->curr_buff_pos - hash->prev_buff_size), size - hash->prev_buff_size);
+        }
         add_hash(hash, adler32_finalize(&hash->current_hash));
         adler32_init(&hash->current_hash);
     }
@@ -304,19 +305,26 @@ void check_first_hash(struct Hash *hash) {
 
 //updates the hash with data in the size of data_size
 void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
-    uint32_t location = move_to_buff(hash, data, data_size, 0);
+    hash->buff = data;
+    hash->buff_size = data_size;
+    printf("assigned the buffer\n");
     if (!hash->hash_size) {
         check_first_hash(hash);
     }
-    while (location < data_size) {
-        location = move_to_buff(hash, data, data_size, location);
+    printf("first hash check in update\n");
+    while (hash->buff_size > 4) {
+        printf("I am in an update loop\n");
         hash_data(hash, 4);
     }
+    memcpy(hash->prev_buff, hash->buff + hash->curr_buff_pos, hash->buff_size);
+    hash->prev_buff_size = hash->buff_size;
+    hash->curr_buff_pos = 0;
 }
 
 //finalize the hash. data should be large enough to store the hash. return value is the hash size in bytes
 uint32_t finalize_hasher(struct Hash *hash, char *hash_val, uint32_t size) {
     hash->finalize_data = 1;
+    printf("Finalizeing\n");
     if (!hash->hash_size) {
         check_first_hash(hash);
     }
@@ -341,7 +349,7 @@ int main(int argc, char *argv[]) {
     }
     struct Hash hashy_mc_hasherton;
     init_hasher(&hashy_mc_hasherton);
-    uint32_t ssize = 2048;
+    uint16_t ssize = 2048;
     uint8_t file_buff[ssize];
     FILE *filehashing = fopen(argv[1], "r");
     uint16_t ret_val = 0;
@@ -349,8 +357,9 @@ int main(int argc, char *argv[]) {
         update_hasher(&hashy_mc_hasherton, file_buff, ret_val);
     }
     fclose(filehashing);
+    printf("done updating hash\n");
     char ret_hash_str[121];
     uint32_t hash_val_size = finalize_hasher(&hashy_mc_hasherton, ret_hash_str, 120);
-    printf("%.*s\n", hash_val_size, ret_hash_str);
+    printf("Hash\t%.*s\n", hash_val_size, ret_hash_str);
     return 0;
 }
