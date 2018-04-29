@@ -125,11 +125,11 @@ void hash_data_move_buff(struct Hash *hash, uint32_t size) {
         hash->curr_buff_pos += size;
         hash->buff_size -= size;
         printf("test A  %u  %u  %u\n", size, hash->curr_buff_pos, hash->buff_size);
-    // we determined that we have some prev hash to move. Do we have current_hash to move?
-    // if size <= prev_buff_size then hash the prev buff and remove the size from curr_buff_pos and prev_buff_size
-    // TODO: need to fix prev_buff alignment
+        // we determined that we have some prev hash to move. Do we have current_hash to move?
+        // if size <= prev_buff_size then hash the prev buff and remove the size from curr_buff_pos and prev_buff_size
+        // TODO: need to fix prev_buff alignment
     } else  if (size <= hash->prev_buff_size) {
-        adler32_update(&hash->current_hash, hash->prev_buff + hash->curr_buff_pos, size);
+        adler32_update(&hash->current_hash, hash->prev_buff + (8 - hash->prev_buff_size), size);
         hash->prev_buff_size -= size;
         printf("test B  %u  %u  %u\n", size, hash->prev_buff_size, hash->curr_buff_pos);
     } else {
@@ -137,7 +137,6 @@ void hash_data_move_buff(struct Hash *hash, uint32_t size) {
         printf("test C  %u\n", size);
         adler32_update(&hash->current_hash, hash->prev_buff + (8 - hash->prev_buff_size), hash->prev_buff_size);
         size -= hash->prev_buff_size;
-        hash->curr_buff_pos -= hash->prev_buff_size;
         hash->prev_buff_size = 0;
         adler32_update(&hash->current_hash, hash->buff + hash->curr_buff_pos, size);
         hash->curr_buff_pos += size;
@@ -258,7 +257,7 @@ uint8_t split_data(struct Hash *hash) {
                 hash_data_move_buff(hash, i);
                 return 1;
         }
-        hash->curr_buff_pos + i;
+        hash->curr_buff_pos += i;
     }
     return 0;
 }
