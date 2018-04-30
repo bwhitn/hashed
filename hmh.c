@@ -260,7 +260,11 @@ uint8_t split_data(struct Hash *hash) {
                 if (i > 3) {
                     break;
                 }
-                check_data_size_before_hashing(hash, i);
+                if (i) {
+                    check_data_size_before_hashing(hash, i);
+                } else {
+                    check_data_size_before_hashing(hash, 1);
+                }
                 return 1;
             default:
                 i = non_nul_lf_cr_check(hash);
