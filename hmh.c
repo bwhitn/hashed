@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
+
+#define __DEBUG
 
 const uint8_t  num_of_hashes     = 20;
 const uint32_t min_hash_bytes    = 8;
@@ -18,33 +21,42 @@ enum           char_match        { NUL=0, LF=10, CR=13 };
 // the hashes, hash_size is the number of hashes in hashes, hash_merge_pos is the current location used for concating
 // hashes, finalize_data says wether it should expect more data, current_hash is the current hash.
 struct Hash {
-    uint_fast8_t        hash_size; // The number of hashes
-    uint_fast8_t        hash_merge_pos; // The current position of the merge rotate operation
-    uint_fast8_t        finalize_data; // TODO: remove this to use the buff_size as the buff_size should be zero if finalizing is going on.
-    uint_fast32_t       prev_buff_size; // The current size of the buff. It will change as prev_buff grows and shrinks
-    uint_fast32_t       buff_size; // should be the size of the buff and should not change during the life of the buff ref.
-    uint_fast32_t       high; //high adler word
-    uint_fast32_t       low; //low adler word
-    uint_fast32_t       size; //bytes used in calc
-    uint_fast32_t       hashes[21]; // The array of hash values. The size is max hashes + 1. The +1 is to hold a temporary hash while merges and rotates the hashes.
-    uint_fast8_t        prev_buff[8]; // what is left of the previous buff. Needs to be 8 incase only one byte is given to the update at a time for first hash.
-    uint_fast8_t        *buff; //Should be the same size as value of buff_size_s
+    uint_fast8_t   hash_size; // The number of hashes
+    uint_fast8_t   hash_merge_pos; // The current position of the merge rotate operation
+    bool           finalize_data; // TODO: remove this to use the buff_size as the buff_size should be zero if finalizing is going on.
+    uint_fast32_t  high; //high adler word
+    uint_fast32_t  low; //low adler word
+    uint_fast32_t  size; //bytes in hash
+    uint_fast32_t  hashes[21]; // The array of hash values. The size is max hashes + 1. The +1 is to hold a temporary hash while merges and rotates the hashes.
+    uint8_t   prev_buff[8]; // what is left of the previous buff. Needs to be 8 incase only one byte is given to the update at a time for first hash.
+    uint8_t   *buff; //Should be the same size as value of buff_size_s
+    uint8_t   *buff_end; // The last byte of buff
+    uint8_t   *buff_prev_end; // The last byte of prev_buff
 };
 
 //This Adler32 implementation should probably be replaced with the zlib version at some point
 //initializes the Adler32 struct.
 inline void adler32_init(struct Hash *hash) {
     hash->high = 0;
-    hash->low = 1;
+    hash->low  = 1;
     hash->size = 0;
 }
 
 //adds data to the Adler32 struct.
 
-inline void adler32_update(struct Hash *hash, uint8_t data) {
-    ++size;
-    hash->low = (hash->low + data[i]) % adler32_mod_val;
+inline void adler32_update_one(struct Hash *hash, uint8_t data) {
+    ++hash->size;
+    hash->low = (hash->low + data) % adler32_mod_val;
     hash->high = (hash->high + hash->low) % adler32_mod_val;
+}
+
+inline void adler32_update_buff(struct Hash *hash, uint8_t *data, uint32_t size) {
+    hash->size += size;
+    uint_fast32_t i;
+    for(i = 0;i < size; ++i) {
+        hash->low = (hash->low + data[i]) % adler32_mod_val;
+        hash->high = (hash->high + hash->low) % adler32_mod_val;
+    }
 }
 
 //returns the Adler32 value. Need to re-initialize the struct before using again.
@@ -66,10 +78,8 @@ void b85_encode(uint32_t hash, char *enc_hash) {
 void init_hasher(struct Hash *hash) {
     hash->hash_size = 0;
     hash->hash_merge_pos = 1;
-    hash->prev_buff_size = 0;
-    hash->buff_size = 0;
     hash->finalize_data = 0;
-    adler32_init(&hash);
+    adler32_init(hash);
 }
 
 // are we adding a duplicate hash?
@@ -97,8 +107,8 @@ void shuffle_value(struct Hash *hash) {
 
 // add a hash to the hash values or don't if it is currently one of the values
 void add_hash(struct Hash *hash) {
-    uint32_t hash_val = adler32_finalize(&hash);
-    adler32_init(&hash);
+    uint32_t hash_val = adler32_finalize(hash);
+    adler32_init(hash);
     uint8_t dup_val = has_hash(hash, hash_val);
     //char b85_hash[5];
     //b85_encode(hash_val, b85_hash);
@@ -129,10 +139,10 @@ inline void hash_data_move_buff(struct Hash *hash) {
         }
     } else {
         //else hash prev_buff and current buff and set prev_buff_size = 0
-        adler32_update(&hash->current_hash, hash->prev_buff, hash->prev_buff_size);
+        adler32_update(hash, hash->prev_buff, hash->prev_buff_size);
         size -= hash->prev_buff_size;
         hash->prev_buff_size = 0;
-        adler32_update(&hash, hash->buff, size);
+        adler32_update(hash, hash->buff, size);
         hash->buff += size;
         hash->buff_size -= size;
     }
@@ -200,22 +210,23 @@ uint32_t crlf_check(struct Hash *hash) {
     return i + hash->prev_buff_size;
 }
 
-inline uint32_t non_nul_lf_cr_check(struct Hash *hash) {
-    uint32_t i = 1;
-    while (i < hash->prev_buff_size) {
-        if (hash->buff[i] == NUL || hash->buff[i] == LF || hash->buff[i] == CR) {
-            return i;
+inline void non_nul_lf_cr_check(struct Hash *hash) {
+    uint_fast8_t temp_char;
+    while (&hash->prev_buff <= &hash->prev_buff_end) {
+        temp_char = hash->prev_buff[0];
+        if (temp_char == NUL || temp_char == LF || temp_char == CR) {
+            return;
         }
-        i++;
+        adler32_update_one(hash, temp_char);
     }
-    i = 0;
-    while (i < hash->buff_size) {
-        if (hash->buff[i] == NUL || hash->buff[i] == LF || hash->buff[i] == CR) {
-            return i + hash->prev_buff_size;
+    while (&hash->prev_buff <= &hash->buff_end) {
+        temp_char = hash->buff[0];
+        if (temp_char == NUL || temp_char == LF || temp_char == CR) {
+            return;
         }
-        i++;
+        adler32_update_one(hash, temp_char)
     }
-    return i + hash->prev_buff_size;
+    return;
 }
 
 //split data from the buffer return the size and set the value of data.
@@ -236,26 +247,9 @@ uint8_t split_data(struct Hash *hash) {
                 }
                 check_data_size_before_hashing(hash, i);
                 return 1;
-            /*case LF:
-                i = nul_lf_check(hash, LF);
-                if (i > 3) {
-                    break;
-                }
-                check_data_size_before_hashing(hash, i);
-                return 1;
-            case CR:
-                i = crlf_check(hash);
-                if (i > 3) {
-                    break;
-                }
-                if (i) {
-                    check_data_size_before_hashing(hash, i);
-                } else {
-                    check_data_size_before_hashing(hash, 1);
-                }
-                return 1;*/
             default:
-                i = non_nul_lf_cr_check(hash);
+                adler32_update_one(hash, test_val);
+                i = non_nul_lf_cr_check(hashc);
                 hash_data_move_buff(hash, i);
                 return 1;
         }
@@ -284,6 +278,7 @@ void hash_data(struct Hash *hash, uint32_t to_size) {
     }
 }
 
+//Checks if the first hash has been created and creates it if possible otherwise it continues the hash process
 void check_first_hash(struct Hash *hash) {
     uint32_t size;
     if (hash->finalize_data) {
