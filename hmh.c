@@ -34,6 +34,15 @@ struct Hash {
     uint8_t   *buff_prev_end; // The last byte of prev_buff
 };
 
+struct Buff {
+    uint8_t   head_buff[8]; // what is left of the previous buff. Needs to be 8 incase only one byte is given to the update at a time for first hash.
+    uint8_t   *temp_buff; //Should be the same size as value of buff_size_s
+    uint_fast32_t head_buff_size;
+    uint_fast32_t temp_buff_size;
+    //uint8_t   *buff_end; // The last byte of buff
+    //uint8_t   *buff_prev_end; // The last byte of prev_buff
+}
+
 //This Adler32 implementation should probably be replaced with the zlib version at some point
 //initializes the Adler32 struct.
 inline void adler32_init(struct Hash *hash) {
@@ -126,7 +135,7 @@ void add_hash(struct Hash *hash) {
 
 inline void hash_data_move_buff(struct Hash *hash) {
     if (!hash->prev_buff_size) {
-        adler32_update(&hash, hash->buff, size);
+        adler32_update_buff(&hash, hash->buff, size);
         hash->buff += size;
         hash->buff_size -= size;
         // we determined that we have some prev hash to move. Do we have current_hash to move?
@@ -178,6 +187,8 @@ uint32_t nul_lf_check(struct Hash *hash, uint8_t char_val) {
     return i + hash->prev_buff_size;
 }
 
+/*
+// Not used currently
 uint32_t crlf_check(struct Hash *hash) {
     uint32_t i = 1;
     while (i < hash->prev_buff_size) {
@@ -209,6 +220,7 @@ uint32_t crlf_check(struct Hash *hash) {
     }
     return i + hash->prev_buff_size;
 }
+*/
 
 inline void non_nul_lf_cr_check(struct Hash *hash) {
     uint_fast8_t temp_char;
@@ -336,6 +348,41 @@ uint32_t finalize_hasher(struct Hash *hash, char *hash_val, uint32_t size) {
     }
     hash_val[size - 1] = 0;
     return ret_size;
+}
+
+void buff_init(struct Buff *data_buff) {
+    data_buff->head_buff_size = 0;
+    data_buff->temp_buff_size = 0;
+}
+
+void buff_set(struct Buff data_buff, uint8_t *data, uint32_t size) {
+    data_buff->temp_buff = data;
+    data_buff->temp_buff_size = size;
+}
+
+inline bool buff_has_data_at(struct Buff *data_buff) {
+    if (loc <= (data_buff->head_buff_size + data_buff->temp_buff_size - 1)) {
+        return true;
+    }
+    return false;
+}
+
+inline uint32_t buff_get_size(struct Buff *data_buff) {
+    return data_buff->head_buff_size + data_buff->temp_buff_size;
+}
+
+inline uint8_t read_buff(struct Buff *data_buff, uint32_t loc) {
+    if (data_buff->head_buff_size) {
+        if (data_buff->head_buff_size > loc) {
+            return
+        }
+    } (data_buff->temp_buff_size) {
+
+    }
+}
+
+inline void set_buff_marker(struct Buff *data_buff, uint32_t loc) {i
+
 }
 
 int main(int argc, char *argv[]) {
