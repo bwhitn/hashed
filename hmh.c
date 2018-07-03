@@ -44,6 +44,74 @@ struct Buff {
     //uint8_t   *buff_prev_end; // The last byte of prev_buff
 }
 
+// initialize buffer
+void buff_init(struct Buff *data_buff) {
+    data_buff->head_buff_size = 0;
+    data_buff->temp_buff_size = 0;
+}
+
+// set the temp buffer data
+void buff_set(struct Buff data_buff, uint8_t *data, uint32_t size) {
+    data_buff->temp_buff = data;
+    data_buff->temp_buff_size = size;
+}
+
+// Is there data at a buff location
+inline bool buff_has_data_at(struct Buff *data_buff, uint32_t loc) {
+    if (loc <= (data_buff->head_buff_size + data_buff->temp_buff_size - 1)) {
+        return true;
+    }
+    return false;
+}
+
+// total size of the buff
+inline uint32_t buff_get_size(struct Buff *data_buff) {
+    return data_buff->head_buff_size + data_buff->temp_buff_size;
+}
+
+// Return a byte at set position
+inline uint8_t read_buff(struct Buff *data_buff, uint32_t loc) {
+    if (data_buff->head_buff_size) {
+        if (data_buff->head_buff_size > loc) {
+            return data_buff->head_buff + (data_buff->head_buff_size - (loc + 1));
+        } else {
+            return data_buff->temp_buff + (loc - data_buff->head_buff_size);
+        }
+    } else if (data_buff->temp_buff_size) {
+        if (data_buff->temp_buff_size > loc) {
+            return data_buff->temp_buff + loc;
+        }
+    }
+    return 0;
+}
+
+// advance the buffer by pos positions
+inline void adv_buff_pos(struct Buff *data_buff, uint32_t pos) {
+    if (data_buff->head_buff_size) {
+        if (loc >= data_buff->head_buff_size) {
+            loc -= data_buff->head_buff_size;
+            data_buff->head_buff_size = 0;
+            data_buff->temp_buff += loc;
+            data_buff->temp_buff_size -= loc;
+        } else {
+            data_size->head_buff_size -= loc;
+        }
+    } else {
+        data_buff->temp_buff_size -= loc;
+        data_buff->temp_buff += loc;
+    }
+}
+
+// Move left over data from temp_buff to head_buff. It will fail and not move it if temp_buff is greater than head_buff max size.
+inline void mv_temp_to_head(struct Buff *data_buff) {
+    if (data_buff->temp_buff_size <= 8) {
+        data_buff->head_buff_size = data_buff->temp_buff_size;
+        uint8_t i = 0;
+        for (; i < data_buff->head_buff; i++) {
+            data_buff->head_buff + (8 - i) = data_buff->temp_buff + i;
+        }
+    }
+
 //This Adler32 implementation should probably be replaced with the zlib version at some point
 //initializes the Adler32 struct.
 inline void adler32_init(struct Hash *hash) {
@@ -53,7 +121,6 @@ inline void adler32_init(struct Hash *hash) {
 }
 
 //adds data to the Adler32 struct.
-
 inline void adler32_update_one(struct Hash *hash, uint8_t data) {
     ++hash->size;
     hash->low = (hash->low + data) % adler32_mod_val;
@@ -90,6 +157,7 @@ void init_hasher(struct Hash *hash) {
     hash->hash_merge_pos = 1;
     hash->finalize_data = 0;
     adler32_init(hash);
+    buff_init(hash->buffer);
 }
 
 // are we adding a duplicate hash?
@@ -190,7 +258,7 @@ uint32_t nul_lf_check(struct Hash *hash, uint8_t char_val) {
     return i + hash->prev_buff_size;
 }
 */
- 
+
 /*
 // Not used currently
 uint32_t crlf_check(struct Hash *hash) {
@@ -319,8 +387,7 @@ void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
     if (!data_size) {
         return;
     }
-    hash->buff = data;
-    hash->buff_size = data_size;
+    buff_set(hash->buffer, data, data_size);
     if (!hash->hash_size) {
         check_first_hash(hash);
     }
@@ -352,64 +419,6 @@ uint32_t finalize_hasher(struct Hash *hash, char *hash_val, uint32_t size) {
     }
     hash_val[size - 1] = 0;
     return ret_size;
-}
-
-// initialize buffer
-void buff_init(struct Buff *data_buff) {
-    data_buff->head_buff_size = 0;
-    data_buff->temp_buff_size = 0;
-}
-
-// set the temp buffer data
-void buff_set(struct Buff data_buff, uint8_t *data, uint32_t size) {
-    data_buff->temp_buff = data;
-    data_buff->temp_buff_size = size;
-}
-
-// Is there data at a buff location
-inline bool buff_has_data_at(struct Buff *data_buff, uint32_t loc) {
-    if (loc <= (data_buff->head_buff_size + data_buff->temp_buff_size - 1)) {
-        return true;
-    }
-    return false;
-}
-
-// total size of the buff
-inline uint32_t buff_get_size(struct Buff *data_buff) {
-    return data_buff->head_buff_size + data_buff->temp_buff_size;
-}
-
-// Return a byte at set position
-inline uint8_t read_buff(struct Buff *data_buff, uint32_t loc) {
-    if (data_buff->head_buff_size) {
-        if (data_buff->head_buff_size > loc) {
-            return data_buff->head_buff + (data_buff->head_buff_size - (loc + 1));
-        } else {
-            return data_buff->temp_buff + (loc - data_buff->head_buff_size);
-        }
-    } else if (data_buff->temp_buff_size) {
-        if (data_buff->temp_buff_size > loc) {
-            return data_buff->temp_buff + loc;
-        }
-    }
-    return 0;
-}
-
-// advance the buffer by pos positions
-inline void adv_buff_pos(struct Buff *data_buff, uint32_t pos) {
-    if (data_buff->head_buff_size) {
-        if (loc >= data_buff->head_buff_size) {
-            loc -= data_buff->head_buff_size;
-            data_buff->head_buff_size = 0;
-            data_buff->temp_buff += loc;
-            data_buff->temp_buff_size -= loc;
-        } else {
-            data_size->head_buff_size -= loc
-        }
-    } else {
-        data_buff->temp_buff_size -= loc;
-        data_buff->temp_buff += loc;
-    }
 }
 
 int main(int argc, char *argv[]) {
