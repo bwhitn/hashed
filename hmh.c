@@ -70,7 +70,7 @@ inline uint32_t buff_get_size(struct Buff *data_buff) {
 }
 
 // Return a byte at set position
-inline uint8_t read_buff(struct Buff *data_buff, uint32_t loc) {
+inline uint8_t buff_read(struct Buff *data_buff, uint32_t loc) {
     if (data_buff->head_buff_size) {
         if (data_buff->head_buff_size > loc) {
             return data_buff->head_buff + (data_buff->head_buff_size - (loc + 1));
@@ -86,7 +86,7 @@ inline uint8_t read_buff(struct Buff *data_buff, uint32_t loc) {
 }
 
 // advance the buffer by pos positions
-inline void adv_buff_pos(struct Buff *data_buff, uint32_t pos) {
+inline void buff_adv_pos(struct Buff *data_buff, uint32_t pos) {
     if (data_buff->head_buff_size) {
         if (loc >= data_buff->head_buff_size) {
             loc -= data_buff->head_buff_size;
@@ -364,21 +364,15 @@ void hash_data(struct Hash *hash, uint32_t to_size) {
 
 //Checks if the first hash has been created and creates it if possible otherwise it continues the hash process
 void check_first_hash(struct Hash *hash) {
-    uint32_t size;
-    if (hash->finalize_data) {
-        adler32_update(&hash, hash->prev_buff, hash->prev_buff_size);
-    } else if (hash->buff_size + hash->prev_buff_size >= 8) {
-        if (hash->prev_buff_size) {
-            adler32_update(&hash, hash->prev_buff, hash->prev_buff_size);
+    if (!hash->hash_size) {
+        if (hash->finalize_data || buff_get_size(hash->buffer) >= 8) {
+            uint_fast8_t i;
+            for (i = 0; i < buff_get_size(hash->buffer); i++) {
+                adler32_update_one(hash, buff_read(hash->buffer, i));
+            }
+            add_hash(hash)
         }
-        adler32_update(&hash, hash->buff, 8 - hash->prev_buff_size);
-    } else {
-        memcpy(&hash->prev_buff + hash->prev_buff_size, hash->buff, hash->buff_size);
-        hash->prev_buff_size += hash->buff_size;
-        hash->buff_size = 0;
-        return;
     }
-    add_hash(hash);
     return;
 }
 
