@@ -28,3 +28,6 @@ New thoughts:
 Hash and rotating may not be the best method. Other possibilities would be utilizing the size from the Adler32 hash to determine which ones are combined or if it should be thrown away. For example if you have hashes that are in this order and of this size: 15, 8, 16, 179, 81, 123. Then you could combine 15 to 8 or 8 to 16 but you wouldn't want to combine 16 with 179. So a dimension could be size but another dimension could be the number of times it has been combined. As each time it is combined it is not as representative of the data.
 
 This may not be the best for scripts and should probably be kept for binary elements. This also means LF and CR should be taken out of delimiting of important information. Unless we want to try to determine which type of file it is binary/text we would also need to decide on encoding. most scripts are ASCII but UTF16LE and UTF8 is becoming more common although ASCII and UTF8 would have the same delimiters. We could probably safely say that once a null delimiter was seen then text base delimiters should not be checked.
+
+
+Should still implement Python for reference implementation
