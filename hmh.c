@@ -160,43 +160,7 @@ static inline void add_hash(struct Hash *hash) {
         }
     }
 }
-
-
-/*
-// Not used currently
-static inline uint32_t crlf_check(struct Hash *hash) {
-    uint32_t i = 1;
-    while (i < hash->prev_buff_size) {
-        if (i % 2) {
-            if (hash->prev_buff[i] != LF) {
-                return i;
-            }
-        } else {
-            if (hash->prev_buff[i] != CR) {
-                i--;
-                return i;
-            }
-        }
-        i++;
-    }
-    i = 0;
-    while (i < hash->buff_size) {
-        if (i % 2) {
-            if (hash->buff[i] != LF) {
-                break;
-            }
-        } else {
-            if (hash->buff[i] != CR) {
-                i--;
-                break;
-            }
-        }
-        i++;
-    }
-    return i + hash->prev_buff_size;
-}
-*/
-
+yepu
 static inline uint32_t alt_two_char_check(struct Hash *hash, uint8_t first_char, uint8_t second_char) {
     uint32_t i;
     for (i = 1; i < buff_get_size(hash); i++) {
@@ -275,7 +239,21 @@ static inline bool split_data(struct Hash *hash) {
             hash_data_move_buff(hash, i);
             return false;
         case LF:
+            i = char_check(hash, LF);
+            if (i >= 4) {
+                i = min_buff_depth_check(hash, i, 4);
+                break;
+            }
+            hash_data_move_buff(hash, i);
+            return false;
         case CR:
+            i = alt_two_char_check(hash, CR, LF);
+            if (i >= 4) {
+                i = min_buff_depth_check(hash, i, 4);
+                break;
+            }
+            hash_data_move_buff(hash, i);
+            return false;
         default:
             adler32_update_one(hash, test_val);
             non_nul_lf_cr_check(hash);
