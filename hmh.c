@@ -160,23 +160,38 @@ static inline void add_hash(struct Hash *hash) {
         }
     }
 }
-yepu
+
+// check a two character pattern
 static inline uint32_t alt_two_char_check(struct Hash *hash, uint8_t first_char, uint8_t second_char) {
     uint32_t i;
     for (i = 1; i < buff_get_size(hash); i++) {
         if(i % 2) {
             if (buff_read(hash, i) != second_char) {
+                --i;
                 break;
             }
         } else {
             if (buff_read(hash, i) != first_char) {
-                i--;
                 break;
             }
         }
     }
     return i;
 }
+
+// multi character matching check
+static inline uint32_t multi_char_check(struct Hash *hash, uint8_t* chars, uint32_t size, uint32_t start_num) {
+    uint32_t i;
+    for (i = start_num; i < buff_get_size(hash); i++) {
+        uint32_t mod = i % size;
+        if (buff_read(hash, i) != chars[mod]) {
+            i -= mod;
+            break;
+        }
+    }
+    return i;
+}
+
 
 // Checks to make sure there is a non break character and hashes it.
 static inline void non_nul_lf_cr_check(struct Hash *hash) {
@@ -186,7 +201,7 @@ static inline void non_nul_lf_cr_check(struct Hash *hash) {
         ++i;
         temp_char = buff_read(hash, i);
         // TODO: this will come back one we have this figured out
-        if (temp_char == NUL /*|| temp_char == LF || temp_char == CR*/) {
+        if (temp_char == NUL || temp_char == LF || temp_char == CR) {
             buff_adv_pos(hash, i);
             return;
         }
