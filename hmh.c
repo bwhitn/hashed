@@ -267,7 +267,7 @@ static inline bool split_data(struct Hash *hash) {
                 i = min_buff_depth_check(hash, i, 4);
                 break;
             }
-            hash_data_move_buff(hash, i);
+            hash_data_move_buff(hash, ++i);
             return false;
         default:
             adler32_update_one(hash, test_val);
