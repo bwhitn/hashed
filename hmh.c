@@ -5,7 +5,7 @@
 #include <stdbool.h>
 
 static const uint8_t  max_num_of_hashes = 20;
-static const uint32_t min_hash_bytes    = 8;
+static const uint8_t min_hash_bytes    = 8;
 static const uint32_t e_b85_divisors[5] = {52200625, 614125, 7225, 85, 1};
 static const uint32_t adler32_mod_val   = 65521;
 static const char     *e_b85_chars      = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.:_?+=^!/*&<>()[]{}@%$~";
@@ -23,14 +23,14 @@ struct Hash {
     bool          finalize_data; // TODO: remove this to use the buff_size as the buff_size should be zero if finalizing is going on.
     uint_fast8_t  hash_size; // The number of hashes
     uint_fast8_t  hash_merge_pos; // The current position of the merge rotate operation
+    uint_fast8_t  size; //bytes in hash. used to track that the min bytes were used.
     uint_fast32_t high; //high adler word
     uint_fast32_t low; //low adler word
-    uint_fast32_t size; //bytes in hash
     uint_fast32_t head_buff_size; // Size of the head buff
     uint_fast32_t temp_buff_size; // Size of the temp buff
     uint8_t       *temp_buff; //Should be the same size as value of temp_buff_size. This buff should be valid only during the life of the update_hasher function.
     uint8_t       head_buff[8]; // what is left of the previous buff. Needs to be 8 incase only one byte is given to the update at a time for first hash.
-    uint_fast32_t hashes[21]; // The array of hash values. The size is max hashes + 1. The +1 is to hold a temporary hash while merges and rotates the hashes.
+    uint_fast32_t hashes[20]; // The array of hash values. The size is max hashes + 1. The +1 is to hold a temporary hash while merges and rotates the hashes.
 };
 
 // set the temp buffer data
@@ -98,7 +98,9 @@ static inline void adler32_init(struct Hash *hash) {
 
 //adds data to the Adler32 struct.
 static inline void adler32_update_one(struct Hash *hash, uint8_t data) {
-    ++hash->size;
+    if (!(hash->size & min_hash_bytes)) {
+        ++hash->size;
+    }
     hash->low = (hash->low + data) % adler32_mod_val;
     hash->high = (hash->high + hash->low) % adler32_mod_val;
 }
@@ -135,13 +137,12 @@ static inline bool has_hash(struct Hash *hash, uint32_t hash_val) {
     return false;
 }
 
+// hash merges should happen with 1-18, 0 should be the first hash and 19 should be the last
 static inline void shuffle_value(struct Hash *hash) {
     hash->hashes[hash->hash_merge_pos] ^= hash->hashes[hash->hash_merge_pos + 1];
-    //TODO: replace with memmove
-    for (uint32_t i = ++hash->hash_merge_pos; i < max_num_of_hashes; i++) {
-        hash->hashes[i] = hash->hashes[i + 1];
-    }
-    if (hash->hash_merge_pos == max_num_of_hashes) {
+    ++hash->hash_merge_pos;
+    memmove(&hash->hashes[hash->hash_merge_pos], &hash->hashes[hash->hash_merge_pos + 1], sizeof(uint_fast32_t) * (max_num_of_hashes - hash->hash_merge_pos));
+    if (hash->hash_merge_pos == max_num_of_hashes - 1) {
         hash->hash_merge_pos = 1;
     }
 }
@@ -152,12 +153,12 @@ static inline void add_hash(struct Hash *hash) {
     adler32_init(hash);
     bool dup_val = has_hash(hash, hash_val);
     if (!dup_val) {
-        hash->hashes[hash->hash_size] = hash_val;
-        hash->hash_size++;
-        if (hash->hash_size == 21) {
+        if (hash->hash_size < max_num_of_hashes) {
+            hash->hash_size++;
+        } else {
             shuffle_value(hash);
-            hash->hash_size--;
         }
+        hash->hashes[hash->hash_size - 1] = hash_val;
     }
 }
 
@@ -298,10 +299,10 @@ void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
     buff_mv_temp_to_head(hash);
 }
 
-//TODO: This needs to be fixed it should finish hashing any data left in the buffers and produce one final hash if needed
+//TODO: This needs to be fixed it should finish hashing any data left in the buffers and produce one final hash as a bytearray.
 //finalize the hash. data should be large enough to store the hash. return value is the hash size in bytes
 uint32_t finalize_hasher(struct Hash *hash, char *hash_val, uint32_t size) {
-    hash->finalize_data = 1;
+    hash->finalize_data = true;
     if (!hash->hash_size) {
         check_first_hash(hash);
     }
@@ -309,8 +310,7 @@ uint32_t finalize_hasher(struct Hash *hash, char *hash_val, uint32_t size) {
     // TODO: This will need to be fixed. It is pretty messy
     uint32_t ret_size = hash->hash_size * 6 - 1;
     if (size >= ret_size) {
-        uint32_t i = 0;
-        for (; i < hash->hash_size; i++) {
+        for (uint32_t i = 0; i < hash->hash_size; i++) {
             b85_encode(hash->hashes[i], hash_val+(i*6));
             if (i < hash->hash_size) {
                 //places a dash at correct positions
