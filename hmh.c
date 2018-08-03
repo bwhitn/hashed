@@ -298,6 +298,7 @@ void update_hasher(struct Hash *hash, uint8_t *data, uint32_t data_size) {
     buff_mv_temp_to_head(hash);
 }
 
+//TODO: This needs to be fixed it should finish hashing any data left in the buffers and produce one final hash if needed
 //finalize the hash. data should be large enough to store the hash. return value is the hash size in bytes
 uint32_t finalize_hasher(struct Hash *hash, char *hash_val, uint32_t size) {
     hash->finalize_data = 1;
