@@ -351,6 +351,10 @@ int main(int argc, char *argv[]) {
     for (uint32_t cnt = 1; cnt < argc; cnt++) {
         init_hasher(&hashy_mc_hasherton);
         FILE *filehashing = fopen(argv[cnt], "r");
+        if (!filehashing) {
+            printf("No file %s\n", argv[cnt]);
+            return -1;
+        }
         uint16_t ret_val = 0;
         while ((ret_val = fread(&file_buff, 1, ssize, filehashing))) {
             update_hasher(&hashy_mc_hasherton, file_buff, ret_val);
