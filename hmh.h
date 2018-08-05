@@ -10,7 +10,7 @@ static const uint8_t  MIN_HASH_BYTES    = 8;
 
 static const uint32_t ADLER32_MOD_VAL   = 65521;
 
-static const size_t   HMH_MAX_LEN = MAX_NUM_OF_HASHES * 4;
+static const size_t   HMH_MAX_LEN       = 80;
 
 // buff is the hash buffer, buff size is the current size of data on the buffer, hashes is the array that contains
 // the hashes, hash_size is the number of hashes in hashes, hash_merge_pos is the current location used for concating

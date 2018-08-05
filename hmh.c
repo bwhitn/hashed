@@ -186,7 +186,7 @@ static inline void hash_data_move_buff(struct Hash *hash, uint32_t size) {
 // check and modify buff as needed. To be used for each case statement other than default.
 static inline uint32_t min_buff_depth_check(struct Hash *hash, uint32_t size, uint32_t check_size, uint32_t to_size){
     if (buff_get_size(hash) - size == 0 && to_size) {
-        size -= check_size;
+        size -= size % check_size;
     }
     return size;
 }
@@ -202,6 +202,7 @@ static inline bool split_data(struct Hash *hash, uint32_t to_size) {
                 i = min_buff_depth_check(hash, i, 4, to_size);
                 break;
             }
+            adler32_update_one(hash, test_val);
             hash_data_move_buff(hash, i);
             return false;
         case LF:
@@ -210,6 +211,7 @@ static inline bool split_data(struct Hash *hash, uint32_t to_size) {
                 i = min_buff_depth_check(hash, i, 4, to_size);
                 break;
             }
+            adler32_update_one(hash, test_val);
             hash_data_move_buff(hash, i);
             return false;
         case CR:
@@ -218,6 +220,7 @@ static inline bool split_data(struct Hash *hash, uint32_t to_size) {
                 i = min_buff_depth_check(hash, i, 4, to_size);
                 break;
             }
+            adler32_update_one(hash, test_val);
             hash_data_move_buff(hash, ++i);
             return false;
         default:
