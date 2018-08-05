@@ -12,10 +12,11 @@ static inline void buff_set(struct Hash *hash, uint8_t *data, size_t size) {
 }
 
 // total size of the buff
-static inline uint32_t buff_get_size(struct Hash *hash) {
+static inline size_t buff_get_size(struct Hash *hash) {
     return hash->head_buff_size + hash->temp_buff_size;
 }
 
+// TODO: needs work in here
 // Return a byte at set position
 static inline uint8_t buff_read(struct Hash *hash, uint32_t loc) {
     if (hash->head_buff_size) {
@@ -32,8 +33,9 @@ static inline uint8_t buff_read(struct Hash *hash, uint32_t loc) {
     return 0;
 }
 
+// TODO: needs work in here
 // advance the buffer by pos positions
-static inline void buff_adv_pos(struct Hash *hash, uint32_t pos) {
+static inline void buff_adv_pos(struct Hash *hash, size_t pos) {
     if (hash->head_buff_size) {
         if (pos >= hash->head_buff_size) {
             pos -= hash->head_buff_size;
@@ -49,12 +51,13 @@ static inline void buff_adv_pos(struct Hash *hash, uint32_t pos) {
     }
 }
 
+// TODO: memmove should probably be used.
 // Move left over data from temp_buff to head_buff. It will fail and not move
 // it if temp_buff is greater than head_buff max size.
 static inline void buff_mv_temp_to_head(struct Hash *hash) {
     if (buff_get_size(hash) <= MIN_HASH_BYTES) {
         for (uint8_t i = hash->head_buff_size; i < MIN_HASH_BYTES; i++) {
-            hash->head_buff[7 - i] = hash->temp_buff[i];
+            hash->head_buff[(MIN_HASH_BYTES - 1) - i] = hash->temp_buff[i];
         }
         hash->head_buff_size += hash->temp_buff_size;
         hash->temp_buff_size = 0;
@@ -287,8 +290,8 @@ int main(int argc, char *argv[]) {
         return -1;
     }
     struct Hash hashy_mc_hasherton;
-    //size_t ssize = 1024000;
-    size_t ssize = 65535;
+    size_t ssize = 1024000;
+    //size_t ssize = 65535;
     uint8_t *file_buff;
     file_buff = (uint8_t *) malloc(ssize);
     for (uint32_t cnt = 1; cnt < argc; cnt++) {
