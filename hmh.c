@@ -64,7 +64,7 @@ static inline void buff_mv_temp_to_head(struct Hash *hash) {
     }
 }
 
-//This Adler32 implementation should probably be replaced with the zlib version at some point
+//This Adler32 implementation should probably be replaced with the zlib version at some point?
 //initializes the Adler32 struct.
 static inline void adler32_init(struct Hash *hash) {
     hash->high = 0;
@@ -132,7 +132,7 @@ static inline void add_hash(struct Hash *hash) {
 }
 
 // multi character matching check
-static inline uint32_t multi_char_check(struct Hash *hash, uint8_t* chars, uint32_t size, uint32_t start_num) {
+static inline uint32_t multi_char_check(struct Hash *hash, unsigned char * chars, uint32_t size, uint32_t start_num) {
     uint32_t i;
     for (i = start_num; i < buff_get_size(hash); i++) {
         uint32_t mod = i % size;
@@ -148,10 +148,8 @@ static inline uint32_t multi_char_check(struct Hash *hash, uint8_t* chars, uint3
 static inline void non_nul_lf_cr_check(struct Hash *hash) {
     uint32_t i = 0;
     uint_fast8_t temp_char;
-    while (i < buff_get_size(hash)) {
-        ++i;
+    while (++i < buff_get_size(hash)) {
         temp_char = buff_read(hash, i);
-        // TODO: this will come back one we have this figured out
         if (temp_char == NUL || temp_char == LF || temp_char == CR) {
             buff_adv_pos(hash, i);
             return;
@@ -202,7 +200,6 @@ static inline bool split_data(struct Hash *hash, uint32_t to_size) {
                 i = min_buff_depth_check(hash, i, 4, to_size);
                 break;
             }
-            adler32_update_one(hash, test_val);
             hash_data_move_buff(hash, i);
             return false;
         case LF:
@@ -211,16 +208,14 @@ static inline bool split_data(struct Hash *hash, uint32_t to_size) {
                 i = min_buff_depth_check(hash, i, 4, to_size);
                 break;
             }
-            adler32_update_one(hash, test_val);
             hash_data_move_buff(hash, i);
             return false;
         case CR:
-            i = multi_char_check(hash, (uint8_t*) "\r\n", 2, 1);
+            i = multi_char_check(hash, (unsigned char *) "\r\n", 2, 1);
             if (i >= 4) {
                 i = min_buff_depth_check(hash, i, 4, to_size);
                 break;
             }
-            adler32_update_one(hash, test_val);
             hash_data_move_buff(hash, ++i);
             return false;
         default:
@@ -235,9 +230,10 @@ static inline bool split_data(struct Hash *hash, uint32_t to_size) {
 
 static inline void hash_data(struct Hash *hash, uint32_t to_size) {
     while (buff_get_size(hash) > to_size) {
-        uint8_t data_was_split = split_data(hash, to_size);
+        bool data_was_split = split_data(hash, to_size);
         if (data_was_split) {
             if (hash->size >= to_size) {
+                printf("%zu\n", buff_get_size(hash));
                 add_hash(hash);
             }
         }
@@ -255,7 +251,6 @@ static inline void check_first_hash(struct Hash *hash, uint32_t to_size) {
             add_hash(hash);
         }
     }
-    return;
 }
 
 //updates the hash with data in the size of data_size
@@ -293,8 +288,9 @@ int main(int argc, char *argv[]) {
         return -1;
     }
     struct Hash hashy_mc_hasherton;
-    size_t ssize = 1024000;
+    //size_t ssize = 1024000;
     //size_t ssize = 65535;
+    size_t ssize = 256;
     uint8_t *file_buff;
     file_buff = (uint8_t *) malloc(ssize);
     for (uint32_t cnt = 1; cnt < argc; cnt++) {
