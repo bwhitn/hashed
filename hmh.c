@@ -21,14 +21,13 @@ static inline size_t buff_get_size(struct Hash *hash) {
 static inline uint8_t buff_read(struct Hash *hash, uint32_t loc) {
     if (hash->head_buff_size) {
         if (hash->head_buff_size > loc) {
+            printf("Getting %i\n", hash->head_buff[hash->head_buff_size - (loc + 1)]);
             return hash->head_buff[hash->head_buff_size - (loc + 1)];
         } else {
             return hash->temp_buff[loc - hash->head_buff_size];
         }
-    } else if (hash->temp_buff_size) {
-        if (hash->temp_buff_size > loc) {
-            return hash->temp_buff[loc];
-        }
+    } else if (hash->temp_buff_size > loc) {
+        return hash->temp_buff[loc];
     }
     return 0;
 }
@@ -57,6 +56,7 @@ static inline void buff_adv_pos(struct Hash *hash, size_t pos) {
 static inline void buff_mv_temp_to_head(struct Hash *hash) {
     if (buff_get_size(hash) <= MIN_HASH_BYTES) {
         for (uint8_t i = hash->head_buff_size; i < MIN_HASH_BYTES; i++) {
+            printf("Setting %i\n", hash->temp_buff[i]);
             hash->head_buff[(MIN_HASH_BYTES - 1) - i] = hash->temp_buff[i];
         }
         hash->head_buff_size += hash->temp_buff_size;
@@ -74,6 +74,7 @@ static inline void adler32_init(struct Hash *hash) {
 
 //adds data to the Adler32 struct.
 static inline void adler32_update_one(struct Hash *hash, uint8_t data) {
+    printf("%i\n", data);
     if (!(hash->size & MIN_HASH_BYTES)) {
         ++hash->size;
     }
@@ -127,6 +128,7 @@ static inline void add_hash(struct Hash *hash) {
         } else {
             shuffle_value(hash);
         }
+        printf("Hash %u\n", hash_val);
         hash->hashes[hash->hash_size - 1] = hash_val;
     }
 }
@@ -151,11 +153,13 @@ static inline void non_nul_lf_cr_check(struct Hash *hash) {
     while (++i < buff_get_size(hash)) {
         temp_char = buff_read(hash, i);
         if (temp_char == NUL || temp_char == LF || temp_char == CR) {
+            printf("Moving buffer after hitting possible break at %u with %zu left\n", i, buff_get_size(hash));
             buff_adv_pos(hash, i);
             return;
         }
         adler32_update_one(hash, temp_char);
     }
+    printf("Moving buffer %u after running out of buffer", i);
     buff_adv_pos(hash, i);
     return;
 }
@@ -173,10 +177,9 @@ static inline uint32_t char_check(struct Hash *hash, uint8_t char_val) {
 }
 
 static inline void hash_data_move_buff(struct Hash *hash, uint32_t size) {
-    uint32_t i = 0;
-    while (i < size) {
+    uint32_t i;
+    for (i = 0; i < size; i++) {
         adler32_update_one(hash, buff_read(hash, i));
-        i++;
     }
     buff_adv_pos(hash, i);
 }
@@ -197,7 +200,9 @@ static inline bool split_data(struct Hash *hash, uint32_t to_size) {
         case NUL:
             i = char_check(hash, NUL);
             if (i >= 4) {
+                printf("Have buffer of %u\n", i);
                 i = min_buff_depth_check(hash, i, 4, to_size);
+                printf("And now it is %u\n", i);
                 break;
             }
             hash_data_move_buff(hash, i);
@@ -232,8 +237,7 @@ static inline void hash_data(struct Hash *hash, uint32_t to_size) {
     while (buff_get_size(hash) > to_size) {
         bool data_was_split = split_data(hash, to_size);
         if (data_was_split) {
-            if (hash->size >= to_size) {
-                printf("%zu\n", buff_get_size(hash));
+            if (hash->size >= MIN_HASH_BYTES) {
                 add_hash(hash);
             }
         }
